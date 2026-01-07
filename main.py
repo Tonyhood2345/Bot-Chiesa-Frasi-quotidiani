@@ -17,7 +17,6 @@ PAGE_ID = "INSERISCI_QUI_ID_PAGINA_FACEBOOK_SE_FISSO"
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
-# Nome del font (se non lo trova, userà il default)
 FONT_NAME = "arial.ttf" 
 
 # --- 1. GESTIONE DATI ---
@@ -69,19 +68,14 @@ def get_ai_image(prompt_text):
 
 # --- 4. FUNZIONE CARICAMENTO FONT ---
 def load_font(size):
-    fonts_to_try = [
-        FONT_NAME,             # Il tuo file
-        "DejaVuSans-Bold.ttf", # Linux
-        "arial.ttf"
-    ]
+    fonts_to_try = [FONT_NAME, "DejaVuSans-Bold.ttf", "arial.ttf"]
     for font_path in fonts_to_try:
         try:
             return ImageFont.truetype(font_path, size)
-        except:
-            continue
+        except: continue
     return ImageFont.load_default()
 
-# --- 5. CREAZIONE IMMAGINE (FONT 110) ---
+# --- 5. CREAZIONE IMMAGINE (SPOSTATA IN ALTO) ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
@@ -90,12 +84,11 @@ def create_verse_image(row):
     draw = ImageDraw.Draw(overlay)
     W, H = base_img.size
     
-    # FONT A 110 (Grande, ma gestibile)
+    # FONT 110
     font_txt = load_font(110)  
     font_ref = load_font(65)   
 
     text = f"“{row['Frase']}”"
-    # Wrap a 14 caratteri: bilanciamento perfetto per 110px
     lines = textwrap.wrap(text, width=14) 
     
     line_height = 120 
@@ -103,7 +96,10 @@ def create_verse_image(row):
     ref_height = 90
     total_content_height = text_block_height + ref_height
     
-    start_y = (H - total_content_height) / 2
+    # --- CALCOLO POSIZIONE VERTICALE ---
+    # Prima era: (H - total_content_height) / 2  -> (Centro perfetto)
+    # Ora tolgo 150px per tirarlo su
+    start_y = ((H - total_content_height) / 2) - 150
     
     # BOX SFUMATO
     padding = 50
@@ -114,7 +110,7 @@ def create_verse_image(row):
     
     draw.rectangle(
         [(box_left, box_top), (box_right, box_bottom)], 
-        fill=(0, 0, 0, 140), # Nero semi-trasparente
+        fill=(0, 0, 0, 140), 
         outline=None
     )
     
@@ -143,6 +139,7 @@ def add_logo(img):
             w = int(img.width * 0.20)
             h = int(w * (logo.height / logo.width))
             logo = logo.resize((w, h))
+            # Logo in basso
             img.paste(logo, ((img.width - w)//2, img.height - h - 30), logo)
         except: pass
     return img
@@ -204,7 +201,7 @@ if __name__ == "__main__":
             f"────────────────\n"
             f"{meditazione}\n"
             f"────────────────\n\n"
-            f"📍 Chiesa L'Eterno nostra Giustizia\n\n"
+            f"📍 Chiesa L'Eterno Nostra Giustizia\n\n"
             f"#fede #vangelodelgiorno #chiesa #gesù #preghiera #bibbia"
         )
         
