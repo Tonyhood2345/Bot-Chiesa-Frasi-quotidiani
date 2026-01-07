@@ -9,8 +9,7 @@ import random
 from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw, ImageFont
 
-# --- CONFIGURAZIONE CHIESA ---
-# I token vengono presi dai Segreti di GitHub
+# --- CONFIGURAZIONE ---
 FACEBOOK_TOKEN = os.environ.get("FACEBOOK_TOKEN")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
@@ -18,7 +17,8 @@ PAGE_ID = "INSERISCI_QUI_ID_PAGINA_FACEBOOK_SE_FISSO"
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
-FONT_PATH = "arial.ttf" 
+# Se hai caricato arial.ttf lo usa, altrimenti cerca font di sistema Linux
+FONT_NAME = "arial.ttf" 
 
 # --- 1. GESTIONE DATI ---
 def get_random_verse():
@@ -33,8 +33,7 @@ def get_random_verse():
 # --- 2. GENERATORE PROMPT ---
 def get_image_prompt(categoria):
     cat = str(categoria).lower().strip()
-    # Aggiungo keyword per mantenere lo stile luminoso e celestiale
-    base_style = "bright, divine light, photorealistic, 8k, peaceful"
+    base_style = "bright, divine light, photorealistic, 8k, sun rays, cinematic"
     
     prompts_consolazione = [
         f"peaceful sunset over calm lake, warm golden light, {base_style}",
@@ -66,54 +65,90 @@ def get_ai_image(prompt_text):
             return Image.open(BytesIO(response.content)).convert("RGBA")
     except Exception as e:
         print(f"⚠️ Errore AI: {e}")
-    # Fallback colore
     return Image.new('RGBA', (1080, 1080), (50, 50, 70))
 
-# --- 4. FUNZIONE TESTO BIANCO PULITO (Versione "Prima") ---
+# --- 4. FUNZIONE CARICAMENTO FONT SICURO ---
+def load_font(size):
+    """Cerca il font in vari percorsi per evitare il testo minuscolo"""
+    fonts_to_try = [
+        FONT_NAME,                          # Il file caricato da te
+        "DejaVuSans-Bold.ttf",              # Standard Linux
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "arial.ttf"
+    ]
+    for font_path in fonts_to_try:
+        try:
+            return ImageFont.truetype(font_path, size)
+        except:
+            continue
+    print("⚠️ FONT NON TROVATO: Uso default (sarà piccolo!)")
+    return ImageFont.load_default()
+
+# --- 5. CREAZIONE IMMAGINE CON TESTO ENORME ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
     
-    # VELO SCURO (Opacità 100 su 255): 
-    # Abbastanza scuro da leggere il bianco, abbastanza chiaro da vedere la foto
-    overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 100))
-    final_img = Image.alpha_composite(base_img, overlay)
-    draw = ImageDraw.Draw(final_img)
-    W, H = final_img.size
+    # BOX Sfondo
+    overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    W, H = base_img.size
     
-    try:
-        # FONT GIGANTI
-        font_txt = ImageFont.truetype(FONT_PATH, 110)
-        font_ref = ImageFont.truetype(FONT_PATH, 70)
-    except:
-        font_txt = ImageFont.load_default()
-        font_ref = ImageFont.load_default()
+    # CARICAMENTO FONT ENORME (130px)
+    font_txt = load_font(130)  
+    font_ref = load_font(70)   
 
-    # Testo Versetto
+    # Preparazione Testo
     text = f"“{row['Frase']}”"
-    lines = textwrap.wrap(text, width=16) # Testo compatto al centro
+    # Wrap stretto (12 caratteri) per usare tutta l'altezza
+    lines = textwrap.wrap(text, width=12) 
     
-    line_height = 125
-    total_height = len(lines) * line_height
-    y = (H - total_height) / 2 - 60
+    # Calcoli dimensioni
+    line_height = 140 # Interlinea ampia
+    text_block_height = len(lines) * line_height
+    ref_height = 100
+    total_content_height = text_block_height + ref_height
     
+    # Centratura verticale
+    start_y = (H - total_content_height) / 2
+    
+    # --- BOX SFUMATO ---
+    padding = 60
+    box_left = 40
+    box_top = start_y - padding
+    box_right = W - 40
+    box_bottom = start_y + total_content_height + padding
+    
+    # Disegna il box scuro
+    draw.rectangle(
+        [(box_left, box_top), (box_right, box_bottom)], 
+        fill=(0, 0, 0, 150), 
+        outline=None
+    )
+    
+    final_img = Image.alpha_composite(base_img, overlay)
+    draw_final = ImageDraw.Draw(final_img)
+    
+    # Scrittura Testo
+    current_y = start_y
     for line in lines:
-        bbox = draw.textbbox((0, 0), line, font=font_txt)
+        # Calcola larghezza riga per centrarla
+        bbox = draw_final.textbbox((0, 0), line, font=font_txt)
         w = bbox[2] - bbox[0]
         
-        # TESTO BIANCO PURO (Senza bordi neri, pulito ed elegante)
-        draw.text(((W - w)/2, y), line, font=font_txt, fill="white")
-        y += line_height
+        # Testo BIANCO
+        draw_final.text(((W - w)/2, current_y), line, font=font_txt, fill="white")
+        current_y += line_height
         
-    # Riferimento (Oro)
+    # Riferimento (Giallo Oro)
     ref = str(row['Riferimento'])
-    bbox_ref = draw.textbbox((0, 0), ref, font=font_ref)
+    bbox_ref = draw_final.textbbox((0, 0), ref, font=font_ref)
     w_ref = bbox_ref[2] - bbox_ref[0]
-    draw.text(((W - w_ref)/2, y + 50), ref, font=font_ref, fill="#FFD700")
+    draw_final.text(((W - w_ref)/2, current_y + 30), ref, font=font_ref, fill="#FFD700")
 
     return final_img
 
-# --- 5. LOGO ---
+# --- 6. LOGO ---
 def add_logo(img):
     if os.path.exists(LOGO_PATH):
         try:
@@ -121,34 +156,28 @@ def add_logo(img):
             w = int(img.width * 0.20)
             h = int(w * (logo.height / logo.width))
             logo = logo.resize((w, h))
-            img.paste(logo, ((img.width - w)//2, img.height - h - 40), logo)
+            img.paste(logo, ((img.width - w)//2, img.height - h - 30), logo)
         except: pass
     return img
 
-# --- 6. MEDITAZIONE ---
+# --- 7. MEDITAZIONE ---
 def genera_meditazione(row):
     cat = str(row['Categoria']).lower()
-    
-    intro = random.choice([
-        "🌿 𝗨𝗻 𝗽𝗲𝗻𝘀𝗶𝗲𝗿𝗼 𝗽𝗲𝗿 𝘁𝗲:",
-        "💡 𝗟𝗮 𝗹𝘂𝗰𝗲 𝗱𝗶 𝗼𝗴𝗴𝗶:",
-        "🙏 𝗠𝗲𝗱𝗶𝘁𝗶𝗮𝗺𝗼 𝗶𝗻𝘀𝗶𝗲𝗺𝗲:",
-        "❤️ 𝗣𝗲𝗿 𝗶𝗹 𝘁𝘂𝗼 𝗰𝘂𝗼𝗿𝗲:"
-    ])
+    intro = random.choice(["🌿 𝗨𝗻 𝗽𝗲𝗻𝘀𝗶𝗲𝗿𝗼:", "💡 𝗟𝘂𝗰𝗲 𝗱𝗶 𝗼𝗴𝗴𝗶:", "🙏 𝗥𝗶𝗳𝗹𝗲𝘀𝘀𝗶𝗼𝗻𝗲:"])
     
     msg = ""
     if "consolazione" in cat:
-        msg = "Non sei solo/a nelle tue sfide. C'è una pace pronta ad abbracciarti oggi. Respira e affidati."
+        msg = "Non sei solo/a. C'è una pace pronta ad abbracciarti oggi."
     elif "esortazione" in cat:
-        msg = "Oggi hai una forza nuova! Non guardare l'ostacolo, ma guarda alla vittoria che ti aspetta."
+        msg = "Oggi hai una forza nuova! Guarda alla vittoria che ti aspetta."
     elif "edificazione" in cat:
-        msg = "Costruisci la tua giornata su questa verità. Sei prezioso/a e amato/a."
+        msg = "Costruisci la tua giornata su questa verità solida."
     else:
-        msg = "Porta questa promessa nel cuore, sarà la tua forza e il tuo sorriso oggi."
+        msg = "Porta questa promessa nel cuore, sarà la tua forza oggi."
 
-    return f"{intro}\n{msg}"
+    return f"{intro} {msg}"
 
-# --- 7. SOCIAL ---
+# --- 8. SOCIAL ---
 def send_telegram(img_bytes, caption):
     if not TELEGRAM_TOKEN: return
     try:
@@ -174,8 +203,8 @@ if __name__ == "__main__":
     row = get_random_verse()
     if row is not None:
         print(f"📖 Versetto: {row['Riferimento']}")
-        
         img = add_logo(create_verse_image(row))
+        
         buf = BytesIO()
         img.save(buf, format='PNG')
         buf.seek(0)
@@ -188,8 +217,8 @@ if __name__ == "__main__":
             f"────────────────\n"
             f"{meditazione}\n"
             f"────────────────\n\n"
-            f"📍 Chiesa L'Eterno nostra Giustizia\n\n"
-            f"#fede #vangelodelgiorno #chiesa #gesù #preghiera #bibbia #speranza #dioèamore #versettodelgiorno #amen"
+            f"📍 Chiesa L'Eterno Nostra Giustizia\n\n"
+            f"#fede #vangelodelgiorno #chiesa #gesù #preghiera #bibbia"
         )
         
         send_telegram(buf, caption)
