@@ -63,19 +63,19 @@ def get_ai_image(prompt_text):
         print(f"⚠️ Errore AI: {e}")
     return Image.new('RGBA', (1080, 1080), (50, 50, 70))
 
-# --- FUNZIONE TESTO GIGANTE & BORDO NERO ---
+# --- 4. FUNZIONE TESTO GIGANTE & LEGGIBILE ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
     
-    # Velo scuro leggero (per aiutare il contrasto)
-    overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 90))
+    # Velo scuro leggero (per migliorare il contrasto)
+    overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 80))
     final_img = Image.alpha_composite(base_img, overlay)
     draw = ImageDraw.Draw(final_img)
     W, H = final_img.size
     
     try:
-        # FONT GIGANTE (110)
+        # FONT GIGANTI: 110 per il testo (quasi il doppio di prima)
         font_txt = ImageFont.truetype(FONT_PATH, 110)
         font_ref = ImageFont.truetype(FONT_PATH, 70)
     except:
@@ -84,18 +84,22 @@ def create_verse_image(row):
 
     # Testo Versetto
     text = f"“{row['Frase']}”"
-    # Wrap stretto per riempire il centro
+    
+    # "Stringiamo" il testo (width=16) così va a capo più spesso 
+    # e crea un blocco centrale compatto e grande
     lines = textwrap.wrap(text, width=16)
     
     # Calcolo altezza blocco testo
-    line_height = 125 
+    line_height = 125 # Spazio tra le righe
     total_height = len(lines) * line_height
-    y = (H - total_height) / 2 - 60 
+    y = (H - total_height) / 2 - 60 # Centrato verticalmente
     
     for line in lines:
         bbox = draw.textbbox((0, 0), line, font=font_txt)
         w = bbox[2] - bbox[0]
-        # Bordo nero spesso (Stroke)
+        
+        # --- IL SEGRETO DELLA LEGGIBILITÀ: STROKE (Bordo Nero) ---
+        # Disegna il testo bianco con un contorno nero spesso (6px)
         draw.text(((W - w)/2, y), line, font=font_txt, fill="white", stroke_width=6, stroke_fill="black")
         y += line_height
         
@@ -107,7 +111,7 @@ def create_verse_image(row):
 
     return final_img
 
-# --- 4. LOGO ---
+# --- 5. LOGO ---
 def add_logo(img):
     if os.path.exists(LOGO_PATH):
         try:
@@ -119,14 +123,13 @@ def add_logo(img):
         except: pass
     return img
 
-# --- 5. MEDITAZIONE POSITIVA (NUOVA FUNZIONE) ---
+# --- 6. MEDITAZIONE POSITIVA ---
 def genera_meditazione(row):
     """
     Crea un breve pensiero positivo basato sulla categoria del versetto.
     """
     cat = str(row['Categoria']).lower()
     
-    # Frasi di apertura random
     intro = random.choice([
         "🌿 𝗨𝗻 𝗽𝗲𝗻𝘀𝗶𝗲𝗿𝗼 𝗽𝗲𝗿 𝘁𝗲:",
         "💡 𝗟𝗮 𝗹𝘂𝗰𝗲 𝗱𝗶 𝗼𝗴𝗴𝗶:",
@@ -135,36 +138,18 @@ def genera_meditazione(row):
     ])
     
     msg = ""
-
-    # Logica in base alla categoria
     if "consolazione" in cat:
-        msg = (
-            "Non importa quanto sia grande la sfida che stai affrontando oggi, ricorda che non sei solo/a. "
-            "C'è una pace che supera ogni comprensione pronta ad abbracciarti. "
-            "Respira profondamente e lascia andare l'ansia: sei custodito/a nelle Sue mani sicure."
-        )
+        msg = "Non sei solo/a nelle tue sfide. C'è una pace pronta ad abbracciarti oggi. Respira e affidati."
     elif "esortazione" in cat:
-        msg = (
-            "Oggi hai la forza per superare qualsiasi ostacolo! "
-            "Non guardare alle tue limitazioni, ma alla grandezza di Colui che ti fortifica. "
-            "Alzati con coraggio: c'è un piano meraviglioso che si sta compiendo proprio per te."
-        )
+        msg = "Oggi hai una forza nuova! Non guardare l'ostacolo, ma guarda alla vittoria che ti aspetta."
     elif "edificazione" in cat:
-        msg = (
-            "Ogni giorno è un'opportunità per costruire fondamenta solide nella tua vita. "
-            "Fai tesoro di questa verità e lascia che guidi le tue decisioni. "
-            "Cresci nella consapevolezza che sei amato/a e prezioso/a."
-        )
-    else: # Generico/Altro
-        msg = (
-            "Porta questa promessa nel tuo cuore per tutta la giornata. "
-            "Lascia che sia la tua forza e il tuo sorriso. "
-            "Le cose migliori devono ancora arrivare, credici con tutto te stesso/a!"
-        )
+        msg = "Costruisci la tua giornata su questa verità. Sei prezioso/a e amato/a."
+    else:
+        msg = "Porta questa promessa nel cuore, sarà la tua forza e il tuo sorriso oggi."
 
     return f"{intro}\n{msg}"
 
-# --- 6. SOCIAL ---
+# --- 7. SOCIAL ---
 def send_telegram(img_bytes, caption):
     if not TELEGRAM_TOKEN: return
     try:
@@ -191,16 +176,14 @@ if __name__ == "__main__":
     if row is not None:
         print(f"📖 Versetto: {row['Riferimento']}")
         
-        # Creazione Immagine
+        # Immagine
         img = add_logo(create_verse_image(row))
         buf = BytesIO()
         img.save(buf, format='PNG')
         buf.seek(0)
         
-        # Generazione Testo Meditazione
+        # Testo e Hashtag
         meditazione = genera_meditazione(row)
-        
-        # Creazione Testo Post Completo
         caption = (
             f"✨ {str(row['Categoria']).upper()} ✨\n\n"
             f"“{row['Frase']}”\n"
@@ -208,11 +191,10 @@ if __name__ == "__main__":
             f"────────────────\n"
             f"{meditazione}\n"
             f"────────────────\n\n"
-            f"📍 Chiesa L'Eterno Nostra Giustizia\n\n"
+            f"📍 Chiesa L'Eterno nostra Giustizia\n\n"
             f"#fede #vangelodelgiorno #chiesa #gesù #preghiera #bibbia #speranza #dioèamore #versettodelgiorno #amen"
         )
         
-        # Invio
         send_telegram(buf, caption)
         buf.seek(0)
         post_facebook(buf, caption)
