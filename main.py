@@ -10,7 +10,6 @@ from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw, ImageFont
 
 # --- CONFIGURAZIONE CHIESA ---
-# I token vengono presi dai Segreti di GitHub
 FACEBOOK_TOKEN = os.environ.get("FACEBOOK_TOKEN")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
@@ -30,20 +29,25 @@ def get_random_verse():
         print(f"⚠️ Errore lettura CSV: {e}")
         return None
 
-# --- 2. GENERATORE PROMPT ---
+# --- 2. GENERATORE PROMPT (SOLO IMMAGINI LUMINOSE) ---
 def get_image_prompt(categoria):
     cat = str(categoria).lower().strip()
+    # Aggiungo keyword "bright, sunny, divine light" per forzare la luminosità
+    base_style = "bright, sunny, divine light, photorealistic, 8k, uplifting"
+    
     prompts_consolazione = [
-        "peaceful sunset over calm lake, warm golden light, nature, photorealistic, 8k, rays of light",
-        "gentle morning light through trees, forest path, peaceful atmosphere, cinematic lighting"
+        f"peaceful sunset with sun rays breaking through clouds, {base_style}",
+        f"calm lake reflection morning sun, {base_style}",
+        f"hands reaching for light in sky, {base_style}"
     ]
     prompts_esortazione = [
-        "majestic mountain peak, sunrise rays, dramatic sky, epic view, 8k, powerful nature",
-        "eagle flying in blue sky, sun flare, freedom, strength, glorious light"
+        f"majestic mountain peak in full daylight, {base_style}",
+        f"eagle flying in bright blue sky with sun flare, {base_style}",
+        f"pathway in green forest with sunbeams, {base_style}"
     ]
     prompts_altro = [
-        "beautiful blue sky with white clouds, heaven light, spiritual background, ethereal",
-        "field of flowers, spring, colorful, creation beauty, macro shot"
+        f"beautiful blue sky with white fluffy clouds, {base_style}",
+        f"field of flowers in spring sunshine, {base_style}"
     ]
 
     if "consolazione" in cat: return random.choice(prompts_consolazione)
@@ -61,53 +65,59 @@ def get_ai_image(prompt_text):
             return Image.open(BytesIO(response.content)).convert("RGBA")
     except Exception as e:
         print(f"⚠️ Errore AI: {e}")
-    return Image.new('RGBA', (1080, 1080), (50, 50, 70))
+    return Image.new('RGBA', (1080, 1080), (200, 200, 200)) # Fallback chiaro
 
-# --- 4. FUNZIONE TESTO GIGANTE & LEGGIBILE ---
+# --- 4. FUNZIONE TESTO "LUMINOSO & LEGGIBILE" (Drop Shadow) ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
     
-    # Velo scuro leggero (per migliorare il contrasto)
-    overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 80))
+    # Velo leggerissimo (solo 40 su 255) per mantenere la luce
+    overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 40))
     final_img = Image.alpha_composite(base_img, overlay)
     draw = ImageDraw.Draw(final_img)
     W, H = final_img.size
     
     try:
-        # FONT GIGANTI: 110 per il testo (quasi il doppio di prima)
         font_txt = ImageFont.truetype(FONT_PATH, 110)
         font_ref = ImageFont.truetype(FONT_PATH, 70)
     except:
         font_txt = ImageFont.load_default()
         font_ref = ImageFont.load_default()
 
-    # Testo Versetto
     text = f"“{row['Frase']}”"
-    
-    # "Stringiamo" il testo (width=16) così va a capo più spesso 
-    # e crea un blocco centrale compatto e grande
     lines = textwrap.wrap(text, width=16)
     
-    # Calcolo altezza blocco testo
-    line_height = 125 # Spazio tra le righe
+    line_height = 125
     total_height = len(lines) * line_height
-    y = (H - total_height) / 2 - 60 # Centrato verticalmente
+    y = (H - total_height) / 2 - 60
+    
+    # Parametri Ombra (Spostamento)
+    shadow_offset = 6 
     
     for line in lines:
         bbox = draw.textbbox((0, 0), line, font=font_txt)
         w = bbox[2] - bbox[0]
         
-        # --- IL SEGRETO DELLA LEGGIBILITÀ: STROKE (Bordo Nero) ---
-        # Disegna il testo bianco con un contorno nero spesso (6px)
-        draw.text(((W - w)/2, y), line, font=font_txt, fill="white", stroke_width=6, stroke_fill="black")
+        # 1. Disegna l'OMBRA (Nero semi-trasparente) spostata
+        # Simula un'ombra morbida disegnandola più volte o con colore meno intenso se necessario
+        # Qui usiamo un nero netto spostato per massima leggibilità pulita
+        draw.text(((W - w)/2 + shadow_offset, y + shadow_offset), line, font=font_txt, fill="black")
+        
+        # 2. Disegna il TESTO (Bianco Puro) sopra
+        draw.text(((W - w)/2, y), line, font=font_txt, fill="white")
+        
         y += line_height
         
-    # Riferimento (Giallo con bordo nero)
+    # Riferimento (Oro con Ombra Nera)
     ref = str(row['Riferimento'])
     bbox_ref = draw.textbbox((0, 0), ref, font=font_ref)
     w_ref = bbox_ref[2] - bbox_ref[0]
-    draw.text(((W - w_ref)/2, y + 50), ref, font=font_ref, fill="#FFD700", stroke_width=4, stroke_fill="black")
+    
+    # Ombra riferimento
+    draw.text(((W - w_ref)/2 + 4, y + 50 + 4), ref, font=font_ref, fill="black")
+    # Testo riferimento
+    draw.text(((W - w_ref)/2, y + 50), ref, font=font_ref, fill="#FFD700") # Oro
 
     return final_img
 
@@ -123,11 +133,8 @@ def add_logo(img):
         except: pass
     return img
 
-# --- 6. MEDITAZIONE POSITIVA ---
+# --- 6. MEDITAZIONE ---
 def genera_meditazione(row):
-    """
-    Crea un breve pensiero positivo basato sulla categoria del versetto.
-    """
     cat = str(row['Categoria']).lower()
     
     intro = random.choice([
@@ -176,13 +183,11 @@ if __name__ == "__main__":
     if row is not None:
         print(f"📖 Versetto: {row['Riferimento']}")
         
-        # Immagine
         img = add_logo(create_verse_image(row))
         buf = BytesIO()
         img.save(buf, format='PNG')
         buf.seek(0)
         
-        # Testo e Hashtag
         meditazione = genera_meditazione(row)
         caption = (
             f"✨ {str(row['Categoria']).upper()} ✨\n\n"
