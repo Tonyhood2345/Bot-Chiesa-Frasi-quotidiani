@@ -75,7 +75,7 @@ def load_font(size):
         except: continue
     return ImageFont.load_default()
 
-# --- 5. CREAZIONE IMMAGINE (SPOSTATA IN ALTO) ---
+# --- 5. CREAZIONE IMMAGINE (FONT 100 + SPOSTATO SU) ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
@@ -84,21 +84,20 @@ def create_verse_image(row):
     draw = ImageDraw.Draw(overlay)
     W, H = base_img.size
     
-    # FONT 110
-    font_txt = load_font(110)  
-    font_ref = load_font(65)   
+    # FONT DIMENSIONE 100
+    font_txt = load_font(100)  
+    font_ref = load_font(60)   
 
     text = f"“{row['Frase']}”"
-    lines = textwrap.wrap(text, width=14) 
+    # Wrap a 16 caratteri: con font 100 possiamo permetterci righe un po' più lunghe
+    lines = textwrap.wrap(text, width=16) 
     
-    line_height = 120 
+    line_height = 110
     text_block_height = len(lines) * line_height
-    ref_height = 90
+    ref_height = 80
     total_content_height = text_block_height + ref_height
     
-    # --- CALCOLO POSIZIONE VERTICALE ---
-    # Prima era: (H - total_content_height) / 2  -> (Centro perfetto)
-    # Ora tolgo 150px per tirarlo su
+    # POSIZIONE: Centrato meno 150px (SPOSTATO IN ALTO)
     start_y = ((H - total_content_height) / 2) - 150
     
     # BOX SFUMATO
@@ -127,7 +126,7 @@ def create_verse_image(row):
     ref = str(row['Riferimento'])
     bbox_ref = draw_final.textbbox((0, 0), ref, font=font_ref)
     w_ref = bbox_ref[2] - bbox_ref[0]
-    draw_final.text(((W - w_ref)/2, current_y + 30), ref, font=font_ref, fill="#FFD700")
+    draw_final.text(((W - w_ref)/2, current_y + 25), ref, font=font_ref, fill="#FFD700")
 
     return final_img
 
@@ -139,7 +138,6 @@ def add_logo(img):
             w = int(img.width * 0.20)
             h = int(w * (logo.height / logo.width))
             logo = logo.resize((w, h))
-            # Logo in basso
             img.paste(logo, ((img.width - w)//2, img.height - h - 30), logo)
         except: pass
     return img
