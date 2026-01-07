@@ -17,7 +17,7 @@ PAGE_ID = "INSERISCI_QUI_ID_PAGINA_FACEBOOK_SE_FISSO"
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
-# Se hai caricato arial.ttf lo usa, altrimenti cerca font di sistema Linux
+# Nome del font (se non lo trova, userà il default)
 FONT_NAME = "arial.ttf" 
 
 # --- 1. GESTIONE DATI ---
@@ -67,13 +67,11 @@ def get_ai_image(prompt_text):
         print(f"⚠️ Errore AI: {e}")
     return Image.new('RGBA', (1080, 1080), (50, 50, 70))
 
-# --- 4. FUNZIONE CARICAMENTO FONT SICURO ---
+# --- 4. FUNZIONE CARICAMENTO FONT ---
 def load_font(size):
-    """Cerca il font in vari percorsi per evitare il testo minuscolo"""
     fonts_to_try = [
-        FONT_NAME,                          # Il file caricato da te
-        "DejaVuSans-Bold.ttf",              # Standard Linux
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        FONT_NAME,             # Il tuo file
+        "DejaVuSans-Bold.ttf", # Linux
         "arial.ttf"
     ]
     for font_path in fonts_to_try:
@@ -81,66 +79,55 @@ def load_font(size):
             return ImageFont.truetype(font_path, size)
         except:
             continue
-    print("⚠️ FONT NON TROVATO: Uso default (sarà piccolo!)")
     return ImageFont.load_default()
 
-# --- 5. CREAZIONE IMMAGINE CON TESTO ENORME ---
+# --- 5. CREAZIONE IMMAGINE (FONT 110) ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
     
-    # BOX Sfondo
     overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     W, H = base_img.size
     
-    # CARICAMENTO FONT ENORME (130px)
-    font_txt = load_font(130)  
-    font_ref = load_font(70)   
+    # FONT A 110 (Grande, ma gestibile)
+    font_txt = load_font(110)  
+    font_ref = load_font(65)   
 
-    # Preparazione Testo
     text = f"“{row['Frase']}”"
-    # Wrap stretto (12 caratteri) per usare tutta l'altezza
-    lines = textwrap.wrap(text, width=12) 
+    # Wrap a 14 caratteri: bilanciamento perfetto per 110px
+    lines = textwrap.wrap(text, width=14) 
     
-    # Calcoli dimensioni
-    line_height = 140 # Interlinea ampia
+    line_height = 120 
     text_block_height = len(lines) * line_height
-    ref_height = 100
+    ref_height = 90
     total_content_height = text_block_height + ref_height
     
-    # Centratura verticale
     start_y = (H - total_content_height) / 2
     
-    # --- BOX SFUMATO ---
-    padding = 60
+    # BOX SFUMATO
+    padding = 50
     box_left = 40
     box_top = start_y - padding
     box_right = W - 40
     box_bottom = start_y + total_content_height + padding
     
-    # Disegna il box scuro
     draw.rectangle(
         [(box_left, box_top), (box_right, box_bottom)], 
-        fill=(0, 0, 0, 150), 
+        fill=(0, 0, 0, 140), # Nero semi-trasparente
         outline=None
     )
     
     final_img = Image.alpha_composite(base_img, overlay)
     draw_final = ImageDraw.Draw(final_img)
     
-    # Scrittura Testo
     current_y = start_y
     for line in lines:
-        # Calcola larghezza riga per centrarla
         bbox = draw_final.textbbox((0, 0), line, font=font_txt)
         w = bbox[2] - bbox[0]
-        
-        # Testo BIANCO
         draw_final.text(((W - w)/2, current_y), line, font=font_txt, fill="white")
         current_y += line_height
         
-    # Riferimento (Giallo Oro)
     ref = str(row['Riferimento'])
     bbox_ref = draw_final.textbbox((0, 0), ref, font=font_ref)
     w_ref = bbox_ref[2] - bbox_ref[0]
@@ -217,7 +204,7 @@ if __name__ == "__main__":
             f"────────────────\n"
             f"{meditazione}\n"
             f"────────────────\n\n"
-            f"📍 Chiesa L'Eterno Nostra Giustizia\n\n"
+            f"📍 Chiesa L'Eterno nostra Giustizia\n\n"
             f"#fede #vangelodelgiorno #chiesa #gesù #preghiera #bibbia"
         )
         
