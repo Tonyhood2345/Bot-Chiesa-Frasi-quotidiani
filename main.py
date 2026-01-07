@@ -10,13 +10,10 @@ from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw, ImageFont
 
 # --- CONFIGURAZIONE CHIESA ---
-# I token vengono presi dai Segreti di GitHub
 FACEBOOK_TOKEN = os.environ.get("FACEBOOK_TOKEN")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-PAGE_ID = "INSERISCI_QUI_ID_PAGINA_FACEBOOK_SE_FISSO_O_USA_ENV" 
-# Nota: Se l'ID pagina non cambia, puoi scriverlo direttamente qui sopra tra virgolette,
-# oppure aggiungerlo come segreto PAGE_ID su GitHub.
+PAGE_ID = "INSERISCI_QUI_ID_PAGINA_FACEBOOK_SE_FISSO" 
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
@@ -65,38 +62,51 @@ def get_ai_image(prompt_text):
         print(f"⚠️ Errore AI: {e}")
     return Image.new('RGBA', (1080, 1080), (50, 50, 70))
 
+# --- FUNZIONE TESTO GIGANTE MODIFICATA ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
     
-    # Velo scuro
-    overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 130))
+    # Velo scuro (leggermente più scuro per contrasto)
+    overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 100))
     final_img = Image.alpha_composite(base_img, overlay)
     draw = ImageDraw.Draw(final_img)
     W, H = final_img.size
     
     try:
-        font_txt = ImageFont.truetype(FONT_PATH, 60)
-        font_ref = ImageFont.truetype(FONT_PATH, 40)
+        # FONT GIGANTE (Dimensione 120)
+        font_txt = ImageFont.truetype(FONT_PATH, 110) 
+        # RIFERIMENTO GRANDE (Dimensione 70)
+        font_ref = ImageFont.truetype(FONT_PATH, 70)
     except:
         font_txt = ImageFont.load_default()
         font_ref = ImageFont.load_default()
 
-    # Testo
+    # Testo Versetto
     text = f"“{row['Frase']}”"
-    lines = textwrap.wrap(text, width=25)
-    y = (H / 2) - (len(lines) * 35)
+    # Wrap a 15 caratteri per farlo andare a capo spesso e riempire il centro
+    lines = textwrap.wrap(text, width=15)
+    
+    # Calcolo altezza blocco testo
+    line_height = 130 # Spazio tra le righe
+    total_height = len(lines) * line_height
+    y = (H - total_height) / 2 - 50 # Centrato verticalmente
     
     for line in lines:
         bbox = draw.textbbox((0, 0), line, font=font_txt)
         w = bbox[2] - bbox[0]
-        draw.text(((W - w)/2, y), line, font=font_txt, fill="white")
-        y += 70
         
-    # Riferimento
+        # BORDO NERO (STROKE) PER LEGGIBILITÀ TOTALE
+        # stroke_width=6 crea un contorno nero spesso intorno alle lettere bianche
+        draw.text(((W - w)/2, y), line, font=font_txt, fill="white", stroke_width=6, stroke_fill="black")
+        y += line_height
+        
+    # Riferimento Biblico (Sotto, Giallo Oro con bordo nero)
     ref = str(row['Riferimento'])
     bbox_ref = draw.textbbox((0, 0), ref, font=font_ref)
-    draw.text(((W - (bbox_ref[2]-bbox_ref[0]))/2, y + 20), ref, font=font_ref, fill="#FFD700")
+    w_ref = bbox_ref[2] - bbox_ref[0]
+    
+    draw.text(((W - w_ref)/2, y + 40), ref, font=font_ref, fill="#FFD700", stroke_width=4, stroke_fill="black")
 
     return final_img
 
@@ -105,10 +115,10 @@ def add_logo(img):
     if os.path.exists(LOGO_PATH):
         try:
             logo = Image.open(LOGO_PATH).convert("RGBA")
-            w = int(img.width * 0.15)
+            w = int(img.width * 0.20) # Logo un po' più grande (20%)
             h = int(w * (logo.height / logo.width))
             logo = logo.resize((w, h))
-            img.paste(logo, ((img.width - w)//2, img.height - h - 30), logo)
+            img.paste(logo, ((img.width - w)//2, img.height - h - 40), logo)
         except: pass
     return img
 
