@@ -75,7 +75,7 @@ def load_font(size):
         except: continue
     return ImageFont.load_default()
 
-# --- 5. CREAZIONE IMMAGINE (FONT 100 + SPOSTATO SU) ---
+# --- 5. CREAZIONE IMMAGINE ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
@@ -84,12 +84,10 @@ def create_verse_image(row):
     draw = ImageDraw.Draw(overlay)
     W, H = base_img.size
     
-    # FONT DIMENSIONE 100
     font_txt = load_font(100)  
     font_ref = load_font(60)   
 
     text = f"“{row['Frase']}”"
-    # Wrap a 16 caratteri: con font 100 possiamo permetterci righe un po' più lunghe
     lines = textwrap.wrap(text, width=16) 
     
     line_height = 110
@@ -97,10 +95,8 @@ def create_verse_image(row):
     ref_height = 80
     total_content_height = text_block_height + ref_height
     
-    # POSIZIONE: Centrato meno 150px (SPOSTATO IN ALTO)
     start_y = ((H - total_content_height) / 2) - 150
     
-    # BOX SFUMATO
     padding = 50
     box_left = 40
     box_top = start_y - padding
@@ -142,22 +138,56 @@ def add_logo(img):
         except: pass
     return img
 
-# --- 7. MEDITAZIONE ---
+# --- 7. MEDITAZIONE (STILE EVANGELICO PENTECOSTALE) ---
 def genera_meditazione(row):
     cat = str(row['Categoria']).lower()
-    intro = random.choice(["🌿 𝗨𝗻 𝗽𝗲𝗻𝘀𝗶𝗲𝗿𝗼:", "💡 𝗟𝘂𝗰𝗲 𝗱𝗶 𝗼𝗴𝗴𝗶:", "🙏 𝗥𝗶𝗳𝗹𝗲𝘀𝘀𝗶𝗼𝗻𝗲:"])
     
-    msg = ""
+    # Intros più carismatiche
+    intro = random.choice([
+        "🔥 𝗣𝗮𝗿𝗼𝗹𝗮 𝗱𝗶 𝗩𝗶𝘁𝗮:", 
+        "🕊️ 𝗚𝘂𝗶𝗱𝗮 𝗱𝗲𝗹𝗹𝗼 𝗦𝗽𝗶𝗿𝗶𝘁𝗼:", 
+        "🙏 𝗣𝗲𝗿 𝗶𝗹 𝘁𝘂𝗼 𝗖𝘂𝗼𝗿𝗲:", 
+        "🙌 𝗚𝗹𝗼𝗿𝗶𝗮 𝗮 𝗗𝗶𝗼:"
+    ])
+    
+    msgs = []
+    
+    # Messaggi specifici in base alla categoria con linguaggio di fede
     if "consolazione" in cat:
-        msg = "Non sei solo/a. C'è una pace pronta ad abbracciarti oggi."
+        msgs = [
+            "Fratello, sorella, non temere! Lo Spirito Santo è il Consolatore e oggi asciuga ogni tua lacrima.",
+            "Affida ogni peso a Gesù. Lui ha già portato le tue sofferenze sulla croce per darti pace.",
+            "Anche se attraversi la valle oscura, non sei solo. Il Buon Pastore è con te e ti rialzerà.",
+            "Dio non è mai in ritardo. Confida nei Suoi tempi perfetti e vedrai la Sua mano muoversi.",
+            "La pace di Dio, che supera ogni intelligenza, custodisca oggi il tuo cuore in Cristo Gesù."
+        ]
     elif "esortazione" in cat:
-        msg = "Oggi hai una forza nuova! Guarda alla vittoria che ti aspetta."
-    elif "edificazione" in cat:
-        msg = "Costruisci la tua giornata su questa verità solida."
-    else:
-        msg = "Porta questa promessa nel cuore, sarà la tua forza oggi."
+        msgs = [
+            "Alzati nel nome di Gesù! Dichiara vittoria sulla tua situazione, il nemico è già sconfitto.",
+            "Non mollare proprio ora. La tua benedizione è vicina. Prega con potenza e vedrai le mura crollare!",
+            "Spezza ogni catena di paura. Hai l'autorità di Cristo in te per camminare sopra le acque.",
+            "Sii forte e coraggioso. Non guardare alle circostanze, ma guarda alla grandezza del tuo Dio!",
+            "La fede sposta le montagne. Oggi, ordina alla tua montagna di spostarsi nel nome di Gesù."
+        ]
+    elif "edificazione" in cat or "fede" in cat:
+        msgs = [
+            "Resta saldo sulla Roccia che è Cristo. Nessuna tempesta potrà smuovere chi confida in Lui.",
+            "Nutri il tuo spirito con la Parola oggi. La fede viene dall'udire la Parola di Dio. Alleluia!",
+            "Sii luce in mezzo alle tenebre. Che gli altri vedano Gesù brillare attraverso la tua vita.",
+            "Non vivere per visione, ma cammina per fede. Dio sta preparando cose grandiosi per te.",
+            "Cresci nella grazia e nella conoscenza del Signore. Lui ha un piano meraviglioso per la tua vita."
+        ]
+    else: # Generico / Altro
+        msgs = [
+            "Metti Dio al primo posto e Lui si prenderà cura di tutto il resto. Amen!",
+            "Prega senza stancarti. La preghiera del giusto ha una grande efficacia nel mondo spirituale.",
+            "Oggi, scegli di benedire e non di mormorare. Dio onora chi ha un cuore grato.",
+            "Lascia che lo Spirito Santo ti guidi in ogni decisione. Lui sa cosa è meglio per te.",
+            "Ricorda: se Dio è per noi, chi sarà contro di noi? Vai avanti con fiducia!"
+        ]
 
-    return f"{intro} {msg}"
+    msg_scelto = random.choice(msgs)
+    return f"{intro}\n{msg_scelto}"
 
 # --- 8. SOCIAL ---
 def send_telegram(img_bytes, caption):
@@ -200,7 +230,7 @@ if __name__ == "__main__":
             f"{meditazione}\n"
             f"────────────────\n\n"
             f"📍 Chiesa L'Eterno Nostra Giustizia\n\n"
-            f"#fede #vangelodelgiorno #chiesa #gesù #preghiera #bibbia"
+            f"#fede #vangelodelgiorno #chiesa #gesù #preghiera #bibbia #paroladidio #pentecostale"
         )
         
         send_telegram(buf, caption)
