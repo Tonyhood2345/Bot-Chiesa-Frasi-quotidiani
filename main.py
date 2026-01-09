@@ -13,7 +13,7 @@ from PIL import Image, ImageOps, ImageDraw, ImageFont
 FACEBOOK_TOKEN = os.environ.get("FACEBOOK_TOKEN")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-PAGE_ID = os.environ.get("PAGE_ID")
+PAGE_ID = "1479209002311050"
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
