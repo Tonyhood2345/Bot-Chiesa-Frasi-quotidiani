@@ -6,6 +6,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import textwrap
 import random
+import json
 from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw, ImageFont
 
@@ -14,6 +15,9 @@ FACEBOOK_TOKEN = os.environ.get("FACEBOOK_TOKEN")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 PAGE_ID = "1479209002311050"
+
+# NUOVO LINK MAKE.COM
+MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/to3jnaud18tieq83k08gui6p08s7meu3"
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
@@ -152,7 +156,6 @@ def genera_meditazione(row):
     
     msgs = []
     
-    # Messaggi specifici in base alla categoria con linguaggio di fede
     if "consolazione" in cat:
         msgs = [
             "Fratello, sorella, non temere! Lo Spirito Santo è il Consolatore e oggi asciuga ogni tua lacrima.",
@@ -189,7 +192,7 @@ def genera_meditazione(row):
     msg_scelto = random.choice(msgs)
     return f"{intro}\n{msg_scelto}"
 
-# --- 8. SOCIAL ---
+# --- 8. SOCIAL & WEBHOOK ---
 def send_telegram(img_bytes, caption):
     if not TELEGRAM_TOKEN: return
     try:
@@ -210,6 +213,38 @@ def post_facebook(img_bytes, message):
         print("✅ Facebook OK")
     except Exception as e: print(f"❌ Facebook Error: {e}")
 
+def trigger_make_webhook(row, img_bytes, meditazione_text):
+    """Invia dati E immagine a Make.com (Multipart)"""
+    print("📡 Inviando dati e immagine a Make.com...")
+    
+    # 1. Dati testuali
+    data_payload = {
+        "categoria": row.get('Categoria', 'N/A'),
+        "riferimento": row.get('Riferimento', 'N/A'),
+        "frase": row.get('Frase', 'N/A'),
+        "meditazione": meditazione_text,
+        "evento": "Post Chiesa Pubblicato",
+        "origine": "Script Python - Chiesa"
+    }
+
+    # 2. File Immagine
+    files_payload = {
+        'upload_file': ('post_chiesa.png', img_bytes, 'image/png')
+    }
+
+    try:
+        response = requests.post(
+            MAKE_WEBHOOK_URL, 
+            data=data_payload,
+            files=files_payload
+        )
+        if response.status_code == 200:
+            print("✅ Webhook Make attivato con immagine!")
+        else:
+            print(f"❌ Errore Webhook Make: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"❌ Errore connessione Make: {e}")
+
 # --- MAIN ---
 if __name__ == "__main__":
     row = get_random_verse()
@@ -219,7 +254,7 @@ if __name__ == "__main__":
         
         buf = BytesIO()
         img.save(buf, format='PNG')
-        buf.seek(0)
+        img_data = buf.getvalue()
         
         meditazione = genera_meditazione(row)
         caption = (
@@ -233,6 +268,14 @@ if __name__ == "__main__":
             f"#fede #vangelodelgiorno #chiesa #gesù #preghiera #bibbia #paroladidio #pentecostale"
         )
         
-        send_telegram(buf, caption)
-        buf.seek(0)
-        post_facebook(buf, caption)
+        # 1. Telegram
+        send_telegram(img_data, caption)
+        
+        # 2. Facebook
+        post_facebook(img_data, caption)
+        
+        # 3. Make.com (CON IMMAGINE E TESTI)
+        trigger_make_webhook(row, img_data, meditazione)
+        
+    else:
+        print("❌ Nessun contenuto nel CSV.")
