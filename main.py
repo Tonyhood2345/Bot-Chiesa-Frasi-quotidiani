@@ -16,8 +16,8 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 PAGE_ID = "1479209002311050"
 
-# NUOVO LINK MAKE.COM
-MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/to3jnaud18tieq83k08gui6p08s7meu3"
+# NUOVO LINK MAKE.COM AGGIORNATO
+MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/hiunkuvfe8mjvfsgyeg0vck4j8dwx6h2"
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
