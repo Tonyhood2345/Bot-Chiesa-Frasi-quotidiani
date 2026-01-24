@@ -134,3 +134,10 @@ def esegui_bot():
         caption = (
             "🚨 NON MANCARE DOMANI! 🚨\n\nFratello, sorella! Domani è il giorno del Signore! 🙌\n"
             "Ti aspettiamo per lodare Dio insieme.\n\n🗓 **DOMANI DOMENICA**\n🕕 **ORE 18
+
+
+            # REGOLA 2: SABATO
+    # Nota: Ho messo <= 18 per permetterti di testare ora
+    elif weekday == 5 and 9 <= hour <= 18:
+        print("🚨 Rilevato slot: SABATO (Invito)")
+        # ... resto del codice ...
