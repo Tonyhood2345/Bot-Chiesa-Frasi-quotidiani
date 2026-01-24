@@ -22,7 +22,7 @@ LOGO_PATH = "logo.png"
 FONT_NAME = "arial.ttf" 
 INDIRIZZO_CHIESA = "📍 Chiesa Evangelica Eterno Nostra Giustizia\nPiazza Umberto, Grotte (AG)"
 
-# --- GESTIONE DATI E IMMAGINI ---
+# --- 1. GESTIONE DATI ---
 def get_random_verse(filtro_categoria=None):
     try:
         df = pd.read_csv(CSV_FILE)
@@ -32,61 +32,122 @@ def get_random_verse(filtro_categoria=None):
             if not df_filtered.empty: return df_filtered.sample(1).iloc[0]
         return df.sample(1).iloc[0]
     except Exception as e:
-        print(f"⚠️ Errore CSV: {e}")
+        print(f"⚠️ Errore lettura CSV: {e}")
         return None
 
+# --- 2. GENERATORE PROMPT (Tuo Originale) ---
 def get_image_prompt(categoria):
     cat = str(categoria).lower().strip()
-    base = "bright, divine light, photorealistic, 8k, cinematic, biblical atmosphere"
-    if "consolazione" in cat: return f"peaceful sunset, warm light, {base}"
-    elif "esortazione" in cat: return f"majestic mountain, sun rays, {base}"
-    else: return f"blue sky, clouds, heaven light, {base}"
+    base_style = "bright, divine light, photorealistic, 8k, sun rays, cinematic"
+    
+    prompts_consolazione = [
+        f"peaceful sunset over calm lake, warm golden light, {base_style}",
+        f"gentle morning light through trees, forest path, {base_style}",
+        f"hands holding light, soft warm background, {base_style}"
+    ]
+    prompts_esortazione = [
+        f"majestic mountain peak, sunrise rays, dramatic sky, {base_style}",
+        f"eagle flying in blue sky, sun flare, freedom, {base_style}",
+        f"running water stream, clear river, energy, {base_style}"
+    ]
+    prompts_altro = [
+        f"beautiful blue sky with white clouds, heaven light, {base_style}",
+        f"field of flowers, spring, colorful, creation beauty, {base_style}"
+    ]
 
-def get_ai_image(prompt):
+    if "consolazione" in cat: return random.choice(prompts_consolazione)
+    elif "esortazione" in cat: return random.choice(prompts_esortazione)
+    else: return random.choice(prompts_altro)
+
+# --- 3. AI & IMMAGINI ---
+def get_ai_image(prompt_text):
+    print(f"🎨 Generazione immagine: {prompt_text}")
     try:
-        url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}?width=1080&height=1080&nologo=true"
-        return Image.open(BytesIO(requests.get(url, timeout=30).content)).convert("RGBA")
-    except: return Image.new('RGBA', (1080, 1080), (50, 50, 70))
+        clean_prompt = prompt_text.replace(" ", "%20")
+        url = f"https://image.pollinations.ai/prompt/{clean_prompt}?width=1080&height=1080&nologo=true"
+        response = requests.get(url, timeout=30)
+        if response.status_code == 200:
+            return Image.open(BytesIO(response.content)).convert("RGBA")
+    except Exception as e:
+        print(f"⚠️ Errore AI: {e}")
+    return Image.new('RGBA', (1080, 1080), (50, 50, 70))
 
+# --- 4. FUNZIONE CARICAMENTO FONT ---
 def load_font(size):
-    try: return ImageFont.truetype(FONT_NAME, size)
-    except: return ImageFont.load_default()
+    fonts_to_try = [FONT_NAME, "DejaVuSans-Bold.ttf", "arial.ttf"]
+    for font_path in fonts_to_try:
+        try:
+            return ImageFont.truetype(font_path, size)
+        except: continue
+    return ImageFont.load_default()
 
+# --- 5. CREAZIONE IMMAGINE (Tua Originale) ---
 def create_verse_image(row):
-    img = get_ai_image(get_image_prompt(row['Categoria'])).resize((1080, 1080))
-    overlay = Image.new('RGBA', img.size, (0,0,0,0))
+    prompt = get_image_prompt(row['Categoria'])
+    base_img = get_ai_image(prompt).resize((1080, 1080))
+    
+    overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
+    W, H = base_img.size
     
-    font_txt = load_font(90)
-    font_ref = load_font(60)
-    
-    lines = textwrap.wrap(f"“{row['Frase']}”", width=18)
-    h_block = len(lines) * 100 + 80
-    start_y = (1080 - h_block) / 2 - 100
-    
-    draw.rectangle([(40, start_y-40), (1040, start_y + h_block + 40)], fill=(0,0,0,150))
-    final = Image.alpha_composite(img, overlay)
-    draw_f = ImageDraw.Draw(final)
-    
-    y = start_y
-    for line in lines:
-        w = draw_f.textlength(line, font=font_txt)
-        draw_f.text(((1080-w)/2, y), line, font=font_txt, fill="white")
-        y += 100
-    
-    ref = str(row['Riferimento'])
-    w_ref = draw_f.textlength(ref, font=font_ref)
-    draw_f.text(((1080-w_ref)/2, y+20), ref, font=font_ref, fill="#FFD700")
-    
-    if os.path.exists(LOGO_PATH):
-        l = Image.open(LOGO_PATH).convert("RGBA")
-        nw = int(1080*0.2)
-        nh = int(nw*(l.height/l.width))
-        final.paste(l.resize((nw,nh)), ((1080-nw)//2, 1080-nh-30), l.resize((nw,nh)))
-    
-    return final
+    # Font Grande come richiesto
+    font_txt = load_font(100)  
+    font_ref = load_font(60)   
 
-# --- INVIO SOCIAL ---
+    text = f"“{row['Frase']}”"
+    # Width 16 come richiesto
+    lines = textwrap.wrap(text, width=16) 
+    
+    line_height = 110
+    text_block_height = len(lines) * line_height
+    ref_height = 80
+    total_content_height = text_block_height + ref_height
+    
+    start_y = ((H - total_content_height) / 2) - 150
+    
+    padding = 50
+    box_left = 40
+    box_top = start_y - padding
+    box_right = W - 40
+    box_bottom = start_y + total_content_height + padding
+    
+    # Rettangolo Originale
+    draw.rectangle(
+        [(box_left, box_top), (box_right, box_bottom)], 
+        fill=(0, 0, 0, 140), 
+        outline=None
+    )
+    
+    final_img = Image.alpha_composite(base_img, overlay)
+    draw_final = ImageDraw.Draw(final_img)
+    
+    current_y = start_y
+    for line in lines:
+        bbox = draw_final.textbbox((0, 0), line, font=font_txt)
+        w = bbox[2] - bbox[0]
+        draw_final.text(((W - w)/2, current_y), line, font=font_txt, fill="white")
+        current_y += line_height
+        
+    ref = str(row['Riferimento'])
+    bbox_ref = draw_final.textbbox((0, 0), ref, font=font_ref)
+    w_ref = bbox_ref[2] - bbox_ref[0]
+    draw_final.text(((W - w_ref)/2, current_y + 25), ref, font=font_ref, fill="#FFD700")
+
+    return final_img
+
+# --- 6. LOGO ---
+def add_logo(img):
+    if os.path.exists(LOGO_PATH):
+        try:
+            logo = Image.open(LOGO_PATH).convert("RGBA")
+            w = int(img.width * 0.20)
+            h = int(w * (logo.height / logo.width))
+            logo = logo.resize((w, h))
+            img.paste(logo, ((img.width - w)//2, img.height - h - 30), logo)
+        except: pass
+    return img
+
+# --- 7. INVIO SOCIAL & WEBHOOK ---
 def send_telegram(img, cap):
     if not TELEGRAM_TOKEN: return
     try:
@@ -108,7 +169,7 @@ def trigger_make(row, img, cap):
                       files={'upload_file': ('post.png', img, 'image/png')})
     except Exception as e: print(f"Errore Make: {e}")
 
-# --- LOGICA DI SELEZIONE POST ---
+# --- 8. LOGICA DI SELEZIONE POST (SCHEDULING) ---
 def esegui_bot():
     # Ottieni l'ora attuale in UTC (GitHub usa UTC)
     now = datetime.now(timezone.utc)
@@ -128,7 +189,7 @@ def esegui_bot():
             intro = random.choice(["🔥 Parola di Vita:", "🕊️ Guida dello Spirito:", "🙏 Per il tuo Cuore:"])
             frase_extra = random.choice(["Dio ti benedica oggi.", "Sii forte nel Signore.", "Cammina per fede."])
             
-            # USO TRIPLE VIRGOLETTE PER EVITARE ERRORI DI TESTO
+            # TRIPLE VIRGOLETTE: Niente errori di sintassi
             caption = f"""✨ {str(row['Categoria']).upper()} ✨
 
 “{row['Frase']}”
@@ -144,13 +205,12 @@ def esegui_bot():
 #fede #vangelodelgiorno #chiesa #gesù"""
 
     # REGOLA 2: SABATO (Invito)
-    # NOTA: Impostato fino alle 22 UTC per darti tempo di testare
+    # NOTA: Impostato fino alle 22 UTC per il test
     elif weekday == 5 and 9 <= hour <= 22:
         print("🚨 Rilevato slot: SABATO (Invito)")
         row = get_random_verse("Esortazione")
         if row is None: row = get_random_verse()
         
-        # USO TRIPLE VIRGOLETTE PER EVITARE ERRORI DI TESTO
         caption = f"""🚨 NON MANCARE DOMANI! 🚨
 
 Fratello, sorella! Domani è il giorno del Signore! 🙌
@@ -199,7 +259,9 @@ Gesù ti sta aspettando!
     # ESECUZIONE
     if row is not None and caption:
         print(f"🚀 Invio in corso... (Versetto: {row['Riferimento']})")
-        img = create_verse_image(row)
+        # Qui usa la TUA grafica originale con il logo
+        img = add_logo(create_verse_image(row))
+        
         buf = BytesIO()
         img.save(buf, format='PNG')
         img_data = buf.getvalue()
