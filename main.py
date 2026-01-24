@@ -128,7 +128,7 @@ def esegui_bot():
             intro = random.choice(["🔥 Parola di Vita:", "🕊️ Guida dello Spirito:", "🙏 Per il tuo Cuore:"])
             frase_extra = random.choice(["Dio ti benedica oggi.", "Sii forte nel Signore.", "Cammina per fede."])
             
-            # TRIPLE QUOTES per evitare errori
+            # USO TRIPLE VIRGOLETTE PER EVITARE ERRORI DI TESTO
             caption = f"""✨ {str(row['Categoria']).upper()} ✨
 
 “{row['Frase']}”
@@ -144,13 +144,13 @@ def esegui_bot():
 #fede #vangelodelgiorno #chiesa #gesù"""
 
     # REGOLA 2: SABATO (Invito)
-    # NOTA: Impostato fino alle 20 UTC per il tuo test
-    elif weekday == 5 and 9 <= hour <= 20:
+    # NOTA: Impostato fino alle 22 UTC per darti tempo di testare
+    elif weekday == 5 and 9 <= hour <= 22:
         print("🚨 Rilevato slot: SABATO (Invito)")
         row = get_random_verse("Esortazione")
         if row is None: row = get_random_verse()
         
-        # TRIPLE QUOTES: Sicuro contro gli errori di linea
+        # USO TRIPLE VIRGOLETTE PER EVITARE ERRORI DI TESTO
         caption = f"""🚨 NON MANCARE DOMANI! 🚨
 
 Fratello, sorella! Domani è il giorno del Signore! 🙌
