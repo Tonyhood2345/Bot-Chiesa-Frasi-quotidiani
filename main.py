@@ -22,7 +22,7 @@ LOGO_PATH = "logo.png"
 FONT_NAME = "arial.ttf" 
 INDIRIZZO_CHIESA = "📍 Chiesa Evangelica Eterno Nostra Giustizia\nPiazza Umberto, Grotte (AG)"
 
-# --- GESTIONE DATI E IMMAGINI (Invariata) ---
+# --- GESTIONE DATI E IMMAGINI ---
 def get_random_verse(filtro_categoria=None):
     try:
         df = pd.read_csv(CSV_FILE)
@@ -88,17 +88,25 @@ def create_verse_image(row):
 
 # --- INVIO SOCIAL ---
 def send_telegram(img, cap):
-    requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto", 
-                  files={'photo': img}, data={'chat_id': TELEGRAM_CHAT_ID, 'caption': cap})
+    if not TELEGRAM_TOKEN: return
+    try:
+        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto", 
+                      files={'photo': img}, data={'chat_id': TELEGRAM_CHAT_ID, 'caption': cap})
+    except Exception as e: print(f"Errore Telegram: {e}")
 
 def post_facebook(img, msg):
-    requests.post(f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos?access_token={FACEBOOK_TOKEN}",
-                  files={'file': img}, data={'message': msg, 'published': 'true'})
+    if not FACEBOOK_TOKEN: return
+    try:
+        requests.post(f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos?access_token={FACEBOOK_TOKEN}",
+                      files={'file': img}, data={'message': msg, 'published': 'true'})
+    except Exception as e: print(f"Errore Facebook: {e}")
 
 def trigger_make(row, img, cap):
-    requests.post(MAKE_WEBHOOK_URL, 
-                  data={'categoria': row.get('Categoria'), 'frase': row.get('Frase'), 'caption_completa': cap},
-                  files={'upload_file': ('post.png', img, 'image/png')})
+    try:
+        requests.post(MAKE_WEBHOOK_URL, 
+                      data={'categoria': row.get('Categoria'), 'frase': row.get('Frase'), 'caption_completa': cap},
+                      files={'upload_file': ('post.png', img, 'image/png')})
+    except Exception as e: print(f"Errore Make: {e}")
 
 # --- LOGICA DI SELEZIONE POST ---
 def esegui_bot():
@@ -112,8 +120,7 @@ def esegui_bot():
     row = None
     caption = ""
 
-    # REGOLA 1: MATTINA PRESTO (circa le 07:00-08:00 Italiane -> 06:00-07:00 UTC)
-    # Esegue TUTTI I GIORNI, inclusi Sabato e Domenica
+    # REGOLA 1: MATTINA PRESTO (Tutti i giorni)
     if 5 <= hour <= 8:
         print("☀️ Rilevato slot: MATTINA (Versetto del giorno)")
         row = get_random_verse()
@@ -121,23 +128,72 @@ def esegui_bot():
             intro = random.choice(["🔥 Parola di Vita:", "🕊️ Guida dello Spirito:", "🙏 Per il tuo Cuore:"])
             frase_extra = random.choice(["Dio ti benedica oggi.", "Sii forte nel Signore.", "Cammina per fede."])
             caption = (
-                f"✨ {str(row['Categoria']).upper()} ✨\n\n“{row['Frase']}”\n📖 {row['Riferimento']}\n\n"
+                f"✨ {str(row['Categoria']).upper()} ✨\n\n"
+                f"“{row['Frase']}”\n"
+                f"📖 {row['Riferimento']}\n\n"
                 f"────────────────\n{intro}\n{frase_extra}\n────────────────\n\n"
                 f"{INDIRIZZO_CHIESA}\n\n#fede #vangelodelgiorno #chiesa #gesù"
             )
 
-    # REGOLA 2: SABATO MATTINA TARDI (circa 11:00 Italiane -> 10:00 UTC)
-    elif weekday == 5 and 9 <= hour <= 11:
+    # REGOLA 2: SABATO MATTINA/POMERIGGIO (Invito)
+    # NOTA: Ho messo fino alle 20 UTC per permetterti il test ORA
+    elif weekday == 5 and 9 <= hour <= 20:
         print("🚨 Rilevato slot: SABATO (Invito)")
         row = get_random_verse("Esortazione")
         if row is None: row = get_random_verse()
+        
+        # Uso le parentesi per unire le stringhe senza errori di sintassi
         caption = (
-            "🚨 NON MANCARE DOMANI! 🚨\n\nFratello, sorella! Domani è il giorno del Signore! 🙌\n"
-            "Ti aspettiamo per lodare Dio insieme.\n\n🗓 **DOMANI DOMENICA**\n🕕 **ORE 18
+            "🚨 NON MANCARE DOMANI! 🚨\n\n"
+            "Fratello, sorella! Domani è il giorno del Signore! 🙌\n"
+            "Ti aspettiamo per lodare Dio insieme.\n\n"
+            "🗓 **DOMANI DOMENICA**\n"
+            "🕕 **ORE 18:00**\n"
+            f"{INDIRIZZO_CHIESA}\n\n"
+            "Non venire da solo, porta un amico! Dio ha una parola per te. 🔥\n\n"
+            f"────────────────\n"
+            f"📖 *Parola per te:*\n"
+            f"“{row['Frase']}”\n"
+            f"({row['Riferimento']})\n"
+            f"────────────────\n\n"
+            "#chiesa #grotte #fede #culto"
+        )
 
+    # REGOLA 3: DOMENICA POMERIGGIO (Reminder)
+    elif weekday == 6 and 15 <= hour <= 17:
+        print("⏳ Rilevato slot: DOMENICA (Reminder)")
+        row = get_random_verse()
+        caption = (
+            "⏳ NON MANCARE, STA PER INIZIARE! ⏳\n\n"
+            "Ci siamo quasi! Alle **18:00** iniziamo il culto. ❤️\n"
+            f"Lascia tutto e corri alla presenza di Dio!\n\n{INDIRIZZO_CHIESA}\n\n"
+            f"Gesù ti sta aspettando!\n\n"
+            f"────────────────\n"
+            f"📖 *La Parola:*\n"
+            f"“{row['Frase']}”\n"
+            f"({row['Riferimento']})\n"
+            f"────────────────\n\n"
+            "#chiesa #grotte #culto #nonmancare"
+        )
 
-            # REGOLA 2: SABATO
-    # Nota: Ho messo <= 18 per permetterti di testare ora
-    elif weekday == 5 and 9 <= hour <= 18:
-        print("🚨 Rilevato slot: SABATO (Invito)")
-        # ... resto del codice ...
+    else:
+        print("❌ Nessuno slot orario corrispondente trovato. Il bot non farà nulla.")
+        return
+
+    # ESECUZIONE
+    if row is not None and caption:
+        print(f"🚀 Invio in corso... (Versetto: {row['Riferimento']})")
+        img = create_verse_image(row)
+        buf = BytesIO()
+        img.save(buf, format='PNG')
+        img_data = buf.getvalue()
+        
+        send_telegram(img_data, caption)
+        post_facebook(img_data, caption)
+        trigger_make(row, img_data, caption)
+        print("✅ Tutto inviato correttamente!")
+    else:
+        print("❌ Errore: Nessun contenuto generato.")
+
+if __name__ == "__main__":
+    esegui_bot()
