@@ -120,61 +120,77 @@ def esegui_bot():
     row = None
     caption = ""
 
-    # REGOLA 1: MATTINA PRESTO (Tutti i giorni)
+    # REGOLA 1: MATTINA PRESTO (Tutti i giorni, 05-08 UTC)
     if 5 <= hour <= 8:
         print("☀️ Rilevato slot: MATTINA (Versetto del giorno)")
         row = get_random_verse()
         if row is not None:
             intro = random.choice(["🔥 Parola di Vita:", "🕊️ Guida dello Spirito:", "🙏 Per il tuo Cuore:"])
             frase_extra = random.choice(["Dio ti benedica oggi.", "Sii forte nel Signore.", "Cammina per fede."])
-            caption = (
-                f"✨ {str(row['Categoria']).upper()} ✨\n\n"
-                f"“{row['Frase']}”\n"
-                f"📖 {row['Riferimento']}\n\n"
-                f"────────────────\n{intro}\n{frase_extra}\n────────────────\n\n"
-                f"{INDIRIZZO_CHIESA}\n\n#fede #vangelodelgiorno #chiesa #gesù"
-            )
+            
+            # TRIPLE QUOTES per evitare errori
+            caption = f"""✨ {str(row['Categoria']).upper()} ✨
 
-    # REGOLA 2: SABATO MATTINA/POMERIGGIO (Invito)
-    # NOTA: Ho messo fino alle 20 UTC per permetterti il test ORA
+“{row['Frase']}”
+📖 {row['Riferimento']}
+
+────────────────
+{intro}
+{frase_extra}
+────────────────
+
+{INDIRIZZO_CHIESA}
+
+#fede #vangelodelgiorno #chiesa #gesù"""
+
+    # REGOLA 2: SABATO (Invito)
+    # NOTA: Impostato fino alle 20 UTC per il tuo test
     elif weekday == 5 and 9 <= hour <= 20:
         print("🚨 Rilevato slot: SABATO (Invito)")
         row = get_random_verse("Esortazione")
         if row is None: row = get_random_verse()
         
-        # Uso le parentesi per unire le stringhe senza errori di sintassi
-        caption = (
-            "🚨 NON MANCARE DOMANI! 🚨\n\n"
-            "Fratello, sorella! Domani è il giorno del Signore! 🙌\n"
-            "Ti aspettiamo per lodare Dio insieme.\n\n"
-            "🗓 **DOMANI DOMENICA**\n"
-            "🕕 **ORE 18:00**\n"
-            f"{INDIRIZZO_CHIESA}\n\n"
-            "Non venire da solo, porta un amico! Dio ha una parola per te. 🔥\n\n"
-            f"────────────────\n"
-            f"📖 *Parola per te:*\n"
-            f"“{row['Frase']}”\n"
-            f"({row['Riferimento']})\n"
-            f"────────────────\n\n"
-            "#chiesa #grotte #fede #culto"
-        )
+        # TRIPLE QUOTES: Sicuro contro gli errori di linea
+        caption = f"""🚨 NON MANCARE DOMANI! 🚨
 
-    # REGOLA 3: DOMENICA POMERIGGIO (Reminder)
+Fratello, sorella! Domani è il giorno del Signore! 🙌
+Ti aspettiamo per lodare Dio insieme.
+
+🗓 **DOMANI DOMENICA**
+🕕 **ORE 18:00**
+{INDIRIZZO_CHIESA}
+
+Non venire da solo, porta un amico! Dio ha una parola per te. 🔥
+
+────────────────
+📖 *Parola per te:*
+“{row['Frase']}”
+({row['Riferimento']})
+────────────────
+
+#chiesa #grotte #fede #culto"""
+
+    # REGOLA 3: DOMENICA POMERIGGIO (Reminder, 15-17 UTC)
     elif weekday == 6 and 15 <= hour <= 17:
         print("⏳ Rilevato slot: DOMENICA (Reminder)")
         row = get_random_verse()
-        caption = (
-            "⏳ NON MANCARE, STA PER INIZIARE! ⏳\n\n"
-            "Ci siamo quasi! Alle **18:00** iniziamo il culto. ❤️\n"
-            f"Lascia tutto e corri alla presenza di Dio!\n\n{INDIRIZZO_CHIESA}\n\n"
-            f"Gesù ti sta aspettando!\n\n"
-            f"────────────────\n"
-            f"📖 *La Parola:*\n"
-            f"“{row['Frase']}”\n"
-            f"({row['Riferimento']})\n"
-            f"────────────────\n\n"
-            "#chiesa #grotte #culto #nonmancare"
-        )
+        
+        caption = f"""⏳ NON MANCARE, STA PER INIZIARE! ⏳
+
+Ci siamo quasi! Alle **18:00** iniziamo il culto. ❤️
+Lascia tutto e corri alla presenza di Dio!
+
+{INDIRIZZO_CHIESA}
+
+Gesù ti sta aspettando!
+
+────────────────
+📖 *La Parola:*
+“{row['Frase']}”
+({row['Riferimento']})
+────────────────
+
+#chiesa #grotte #culto #nonmancare"""
 
     else:
         print("❌ Nessuno slot orario corrispondente trovato. Il bot non farà nulla.")
