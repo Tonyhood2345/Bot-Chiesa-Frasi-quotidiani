@@ -1,4 +1,35 @@
-# REGOLA 2: SABATO (Ho allargato fino alle 18 UTC per il test)
-    elif weekday == 5 and 9 <= hour <= 18:
-        print("🚨 Rilevato slot: SABATO (Invito)")
-        # ... tutto il resto rimane uguale
+name: Bot Chiesa Manuale e Automatico
+
+on:
+  # Questo attiva il bottone "Run workflow" per farlo partire ORA
+  workflow_dispatch:
+  
+  # Questo mantiene la programmazione automatica
+  schedule:
+    - cron: '0 7 * * *'   # Tutti i giorni 08:00 IT
+    - cron: '0 10 * * 6'  # Sabato 11:00 IT
+    - cron: '0 16 * * 0'  # Domenica 17:00 IT
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        pip install requests pandas matplotlib pillow
+
+    - name: Run Bot Script
+      env:
+        FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+        TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      run: python main.py
