@@ -7,27 +7,37 @@ import matplotlib.pyplot as plt
 import textwrap
 import random
 import json
+import time
+import schedule
 from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw, ImageFont
+from datetime import datetime
 
 # --- CONFIGURAZIONE ---
 FACEBOOK_TOKEN = os.environ.get("FACEBOOK_TOKEN")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 PAGE_ID = "1479209002311050"
-
-# NUOVO LINK MAKE.COM AGGIORNATO
 MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/hiunkuvfe8mjvfsgyeg0vck4j8dwx6h2"
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
 FONT_NAME = "arial.ttf" 
 
+# INDIRIZZO CHIESA
+INDIRIZZO_CHIESA = "📍 Chiesa Evangelica Eterno Nostra Giustizia\nPiazza Umberto, Grotte (AG)"
+
 # --- 1. GESTIONE DATI ---
-def get_random_verse():
+def get_random_verse(filtro_categoria=None):
     try:
         df = pd.read_csv(CSV_FILE)
         if df.empty: return None
+        
+        if filtro_categoria:
+            df_filtered = df[df['Categoria'].astype(str).str.contains(filtro_categoria, case=False, na=False)]
+            if not df_filtered.empty:
+                return df_filtered.sample(1).iloc[0]
+        
         return df.sample(1).iloc[0]
     except Exception as e:
         print(f"⚠️ Errore lettura CSV: {e}")
@@ -36,26 +46,25 @@ def get_random_verse():
 # --- 2. GENERATORE PROMPT ---
 def get_image_prompt(categoria):
     cat = str(categoria).lower().strip()
-    base_style = "bright, divine light, photorealistic, 8k, sun rays, cinematic"
+    base_style = "bright, divine light, photorealistic, 8k, sun rays, cinematic, biblical atmosphere"
     
-    prompts_consolazione = [
-        f"peaceful sunset over calm lake, warm golden light, {base_style}",
-        f"gentle morning light through trees, forest path, {base_style}",
-        f"hands holding light, soft warm background, {base_style}"
-    ]
-    prompts_esortazione = [
-        f"majestic mountain peak, sunrise rays, dramatic sky, {base_style}",
-        f"eagle flying in blue sky, sun flare, freedom, {base_style}",
-        f"running water stream, clear river, energy, {base_style}"
-    ]
-    prompts_altro = [
-        f"beautiful blue sky with white clouds, heaven light, {base_style}",
-        f"field of flowers, spring, colorful, creation beauty, {base_style}"
-    ]
-
-    if "consolazione" in cat: return random.choice(prompts_consolazione)
-    elif "esortazione" in cat: return random.choice(prompts_esortazione)
-    else: return random.choice(prompts_altro)
+    if "consolazione" in cat:
+        return random.choice([
+            f"peaceful sunset over calm lake, warm golden light, {base_style}",
+            f"gentle morning light through trees, forest path, {base_style}",
+            f"hands holding light, soft warm background, {base_style}"
+        ])
+    elif "esortazione" in cat:
+        return random.choice([
+            f"majestic mountain peak, sunrise rays, dramatic sky, {base_style}",
+            f"eagle flying in blue sky, sun flare, freedom, {base_style}",
+            f"running water stream, clear river, energy, {base_style}"
+        ])
+    else:
+        return random.choice([
+            f"beautiful blue sky with white clouds, heaven light, {base_style}",
+            f"field of flowers, spring, colorful, creation beauty, {base_style}"
+        ])
 
 # --- 3. AI & IMMAGINI ---
 def get_ai_image(prompt_text):
@@ -63,7 +72,7 @@ def get_ai_image(prompt_text):
     try:
         clean_prompt = prompt_text.replace(" ", "%20")
         url = f"https://image.pollinations.ai/prompt/{clean_prompt}?width=1080&height=1080&nologo=true"
-        response = requests.get(url, timeout=20)
+        response = requests.get(url, timeout=30)
         if response.status_code == 200:
             return Image.open(BytesIO(response.content)).convert("RGBA")
     except Exception as e:
@@ -72,7 +81,7 @@ def get_ai_image(prompt_text):
 
 # --- 4. FUNZIONE CARICAMENTO FONT ---
 def load_font(size):
-    fonts_to_try = [FONT_NAME, "DejaVuSans-Bold.ttf", "arial.ttf"]
+    fonts_to_try = [FONT_NAME, "DejaVuSans-Bold.ttf", "arial.ttf", "segoeui.ttf"]
     for font_path in fonts_to_try:
         try:
             return ImageFont.truetype(font_path, size)
@@ -88,29 +97,23 @@ def create_verse_image(row):
     draw = ImageDraw.Draw(overlay)
     W, H = base_img.size
     
-    font_txt = load_font(100)  
+    font_txt = load_font(90)
     font_ref = load_font(60)   
 
     text = f"“{row['Frase']}”"
-    lines = textwrap.wrap(text, width=16) 
+    lines = textwrap.wrap(text, width=18) 
     
-    line_height = 110
+    line_height = 100
     text_block_height = len(lines) * line_height
     ref_height = 80
     total_content_height = text_block_height + ref_height
     
-    start_y = ((H - total_content_height) / 2) - 150
-    
-    padding = 50
-    box_left = 40
-    box_top = start_y - padding
-    box_right = W - 40
-    box_bottom = start_y + total_content_height + padding
+    start_y = ((H - total_content_height) / 2) - 100
+    padding = 40
     
     draw.rectangle(
-        [(box_left, box_top), (box_right, box_bottom)], 
-        fill=(0, 0, 0, 140), 
-        outline=None
+        [(40, start_y - padding), (W - 40, start_y + total_content_height + padding)], 
+        fill=(0, 0, 0, 150), outline=None
     )
     
     final_img = Image.alpha_composite(base_img, overlay)
@@ -126,7 +129,7 @@ def create_verse_image(row):
     ref = str(row['Riferimento'])
     bbox_ref = draw_final.textbbox((0, 0), ref, font=font_ref)
     w_ref = bbox_ref[2] - bbox_ref[0]
-    draw_final.text(((W - w_ref)/2, current_y + 25), ref, font=font_ref, fill="#FFD700")
+    draw_final.text(((W - w_ref)/2, current_y + 20), ref, font=font_ref, fill="#FFD700")
 
     return final_img
 
@@ -142,57 +145,19 @@ def add_logo(img):
         except: pass
     return img
 
-# --- 7. MEDITAZIONE (STILE EVANGELICO PENTECOSTALE) ---
+# --- 7. MEDITAZIONE (PER I GIORNI SETTIMANALI) ---
 def genera_meditazione(row):
-    cat = str(row['Categoria']).lower()
-    
-    # Intros più carismatiche
-    intro = random.choice([
-        "🔥 𝗣𝗮𝗿𝗼𝗹𝗮 𝗱𝗶 𝗩𝗶𝘁𝗮:", 
-        "🕊️ 𝗚𝘂𝗶𝗱𝗮 𝗱𝗲𝗹𝗹𝗼 𝗦𝗽𝗶𝗿𝗶𝘁𝗼:", 
-        "🙏 𝗣𝗲𝗿 𝗶𝗹 𝘁𝘂𝗼 𝗖𝘂𝗼𝗿𝗲:", 
-        "🙌 𝗚𝗹𝗼𝗿𝗶𝗮 𝗮 𝗗𝗶𝗼:"
-    ])
-    
-    msgs = []
-    
-    if "consolazione" in cat:
-        msgs = [
-            "Fratello, sorella, non temere! Lo Spirito Santo è il Consolatore e oggi asciuga ogni tua lacrima.",
-            "Affida ogni peso a Gesù. Lui ha già portato le tue sofferenze sulla croce per darti pace.",
-            "Anche se attraversi la valle oscura, non sei solo. Il Buon Pastore è con te e ti rialzerà.",
-            "Dio non è mai in ritardo. Confida nei Suoi tempi perfetti e vedrai la Sua mano muoversi.",
-            "La pace di Dio, che supera ogni intelligenza, custodisca oggi il tuo cuore in Cristo Gesù."
-        ]
-    elif "esortazione" in cat:
-        msgs = [
-            "Alzati nel nome di Gesù! Dichiara vittoria sulla tua situazione, il nemico è già sconfitto.",
-            "Non mollare proprio ora. La tua benedizione è vicina. Prega con potenza e vedrai le mura crollare!",
-            "Spezza ogni catena di paura. Hai l'autorità di Cristo in te per camminare sopra le acque.",
-            "Sii forte e coraggioso. Non guardare alle circostanze, ma guarda alla grandezza del tuo Dio!",
-            "La fede sposta le montagne. Oggi, ordina alla tua montagna di spostarsi nel nome di Gesù."
-        ]
-    elif "edificazione" in cat or "fede" in cat:
-        msgs = [
-            "Resta saldo sulla Roccia che è Cristo. Nessuna tempesta potrà smuovere chi confida in Lui.",
-            "Nutri il tuo spirito con la Parola oggi. La fede viene dall'udire la Parola di Dio. Alleluia!",
-            "Sii luce in mezzo alle tenebre. Che gli altri vedano Gesù brillare attraverso la tua vita.",
-            "Non vivere per visione, ma cammina per fede. Dio sta preparando cose grandiosi per te.",
-            "Cresci nella grazia e nella conoscenza del Signore. Lui ha un piano meraviglioso per la tua vita."
-        ]
-    else: # Generico / Altro
-        msgs = [
-            "Metti Dio al primo posto e Lui si prenderà cura di tutto il resto. Amen!",
-            "Prega senza stancarti. La preghiera del giusto ha una grande efficacia nel mondo spirituale.",
-            "Oggi, scegli di benedire e non di mormorare. Dio onora chi ha un cuore grato.",
-            "Lascia che lo Spirito Santo ti guidi in ogni decisione. Lui sa cosa è meglio per te.",
-            "Ricorda: se Dio è per noi, chi sarà contro di noi? Vai avanti con fiducia!"
-        ]
+    intro = random.choice(["🔥 Parola di Vita:", "🕊️ Guida dello Spirito:", "🙏 Per il tuo Cuore:", "🙌 Gloria a Dio:"])
+    msgs = [
+        "Fratello, sorella, non temere! Lo Spirito Santo è il Consolatore.",
+        "Affida ogni peso a Gesù. Lui ha già portato le tue sofferenze.",
+        "Anche se attraversi la valle oscura, il Buon Pastore è con te.",
+        "Metti Dio al primo posto e Lui si prenderà cura di tutto.",
+        "La fede sposta le montagne. Oggi ordina alla tua montagna di spostarsi!"
+    ]
+    return f"{intro}\n{random.choice(msgs)}"
 
-    msg_scelto = random.choice(msgs)
-    return f"{intro}\n{msg_scelto}"
-
-# --- 8. SOCIAL & WEBHOOK ---
+# --- 8. SOCIAL ---
 def send_telegram(img_bytes, caption):
     if not TELEGRAM_TOKEN: return
     try:
@@ -213,69 +178,124 @@ def post_facebook(img_bytes, message):
         print("✅ Facebook OK")
     except Exception as e: print(f"❌ Facebook Error: {e}")
 
-def trigger_make_webhook(row, img_bytes, meditazione_text):
-    """Invia dati E immagine a Make.com (Multipart)"""
-    print("📡 Inviando dati e immagine a Make.com...")
-    
-    # 1. Dati testuali
+def trigger_make_webhook(row, img_bytes, caption_completa):
+    print("📡 Inviando dati a Make.com...")
     data_payload = {
         "categoria": row.get('Categoria', 'N/A'),
         "riferimento": row.get('Riferimento', 'N/A'),
         "frase": row.get('Frase', 'N/A'),
-        "meditazione": meditazione_text,
-        "evento": "Post Chiesa Pubblicato",
-        "origine": "Script Python - Chiesa"
+        "caption_completa": caption_completa,
+        "evento": "Post Chiesa"
     }
-
-    # 2. File Immagine
-    files_payload = {
-        'upload_file': ('post_chiesa.png', img_bytes, 'image/png')
-    }
-
+    files_payload = {'upload_file': ('post_chiesa.png', img_bytes, 'image/png')}
     try:
-        response = requests.post(
-            MAKE_WEBHOOK_URL, 
-            data=data_payload,
-            files=files_payload
-        )
-        if response.status_code == 200:
-            print("✅ Webhook Make attivato con immagine!")
-        else:
-            print(f"❌ Errore Webhook Make: {response.status_code} - {response.text}")
-    except Exception as e:
-        print(f"❌ Errore connessione Make: {e}")
+        requests.post(MAKE_WEBHOOK_URL, data=data_payload, files=files_payload)
+        print("✅ Webhook Make attivato!")
+    except Exception as e: print(f"❌ Errore Make: {e}")
 
-# --- MAIN ---
-if __name__ == "__main__":
-    row = get_random_verse()
-    if row is not None:
-        print(f"📖 Versetto: {row['Riferimento']}")
-        img = add_logo(create_verse_image(row))
+# --- 9. CORE PUBBLICAZIONE ---
+def pubblica_post(tipo_post):
+    print(f"🚀 Avvio procedura pubblicazione: {tipo_post}")
+    
+    row = None
+    caption = ""
+    
+    # --- A. CASO QUOTIDIANO (TUTTI I GIORNI ORE 08:00) ---
+    if tipo_post == "QUOTIDIANO":
+        row = get_random_verse() # Pesca a caso
+        if row is not None:
+            meditazione = genera_meditazione(row)
+            caption = (
+                f"✨ {str(row['Categoria']).upper()} ✨\n\n"
+                f"“{row['Frase']}”\n"
+                f"📖 {row['Riferimento']}\n\n"
+                f"────────────────\n"
+                f"{meditazione}\n"
+                f"────────────────\n\n"
+                f"{INDIRIZZO_CHIESA}\n\n"
+                f"#fede #vangelodelgiorno #chiesa #gesù #preghiera #bibbia"
+            )
+
+    # --- B. CASO SABATO MATTINA (INVITO ORE 11:00) ---
+    elif tipo_post == "SABATO":
+        row = get_random_verse(filtro_categoria="Esortazione")
+        if row is None: row = get_random_verse()
         
+        caption = (
+            "🚨 NON MANCARE DOMANI! 🚨\n\n"
+            "Fratello, sorella! Domani è il giorno del Signore! 🙌\n"
+            "Ti aspettiamo per lodare Dio insieme.\n\n"
+            "🗓 **DOMANI DOMENICA**\n"
+            "🕕 **ORE 18:00**\n"
+            f"{INDIRIZZO_CHIESA}\n\n"
+            "Non venire da solo, porta un amico! Dio ha una parola per te. 🔥\n\n"
+            f"────────────────\n"
+            f"📖 *Versetto di incoraggiamento:*\n"
+            f"“{row['Frase']}”\n"
+            f"({row['Riferimento']})\n"
+            f"────────────────\n\n"
+            "#chiesa #grotte #fede #culto #domenica"
+        )
+
+    # --- C. CASO DOMENICA POMERIGGIO (REMINDER ORE 17:00) ---
+    elif tipo_post == "DOMENICA":
+        row = get_random_verse()
+        caption = (
+            "⏳ NON MANCARE, STA PER INIZIARE! ⏳\n\n"
+            "Ci siamo quasi! Alle **18:00** iniziamo il culto. ❤️\n"
+            "Lascia tutto e corri alla presenza di Dio!\n\n"
+            f"{INDIRIZZO_CHIESA}\n\n"
+            "Gesù ti sta aspettando!\n\n"
+            f"────────────────\n"
+            f"📖 *La Parola di oggi:*\n"
+            f"“{row['Frase']}”\n"
+            f"({row['Riferimento']})\n"
+            f"────────────────\n\n"
+            "#chiesa #grotte #fede #culto #vangelodelgiorno #nonmancare"
+        )
+
+    # --- GENERAZIONE E INVIO ---
+    if row is not None and caption:
+        print(f"📖 Versetto scelto: {row['Riferimento']}")
+        img = add_logo(create_verse_image(row))
         buf = BytesIO()
         img.save(buf, format='PNG')
         img_data = buf.getvalue()
         
-        meditazione = genera_meditazione(row)
-        caption = (
-            f"✨ {str(row['Categoria']).upper()} ✨\n\n"
-            f"“{row['Frase']}”\n"
-            f"📖 {row['Riferimento']}\n\n"
-            f"────────────────\n"
-            f"{meditazione}\n"
-            f"────────────────\n\n"
-            f"📍 Chiesa L'Eterno Nostra Giustizia\n\n"
-            f"#fede #vangelodelgiorno #chiesa #gesù #preghiera #bibbia #paroladidio #pentecostale"
-        )
-        
-        # 1. Telegram
         send_telegram(img_data, caption)
-        
-        # 2. Facebook
         post_facebook(img_data, caption)
-        
-        # 3. Make.com (CON IMMAGINE E TESTI)
-        trigger_make_webhook(row, img_data, meditazione)
-        
+        trigger_make_webhook(row, img_data, caption)
     else:
-        print("❌ Nessun contenuto nel CSV.")
+        print("❌ Nessun versetto trovato o tipo post non valido.")
+
+# --- 10. SCHEDULATORE ---
+def job_mattina():
+    pubblica_post("QUOTIDIANO")
+
+def job_sabato():
+    pubblica_post("SABATO")
+
+def job_domenica():
+    pubblica_post("DOMENICA")
+
+if __name__ == "__main__":
+    print("🤖 Bot Chiesa avviato!")
+    print(f"📍 Indirizzo impostato: {INDIRIZZO_CHIESA}")
+    print("📅 Orari programmati:")
+    print("   - TUTTI I GIORNI: 08:00 (Versetto Quotidiano)")
+    print("   - Sabato EXTRA:   17:08 (Invito Culto)")
+    print("   - Domenica EXTRA: 17:00 (Reminder Urgente)")
+
+    # 1. TUTTI I GIORNI (inclusi Sabato e Domenica) - Versetto Quotidiano
+    schedule.every().day.at("08:00").do(job_mattina)
+
+    # 2. Sabato - Invito Extra
+    schedule.every().saturday.at("17:08").do(job_sabato)
+
+    # 3. Domenica - Reminder Extra Urgente
+    schedule.every().sunday.at("17:00").do(job_domenica)
+
+    # Loop Infinito
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
