@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 # --- CONFIGURAZIONE ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+
+# IL TUO LINK DI MAKE (L'ho rimesso qui)
 MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/hiunkuvfe8mjvfsgyeg0vck4j8dwx6h2"
 
 CSV_FILE = "Frasichiesa.csv"
@@ -36,27 +38,14 @@ def get_random_verse(filtro_categoria=None):
 def get_image_prompt(categoria):
     cat = str(categoria).lower().strip()
     base_style = "bright, divine light, photorealistic, 8k, sun rays, cinematic"
-    
-    prompts_consolazione = [
-        f"peaceful sunset over calm lake, warm golden light, {base_style}",
-        f"gentle morning light through trees, forest path, {base_style}",
-        f"hands holding light, soft warm background, {base_style}"
-    ]
-    prompts_esortazione = [
-        f"majestic mountain peak, sunrise rays, dramatic sky, {base_style}",
-        f"eagle flying in blue sky, sun flare, freedom, {base_style}",
-        f"running water stream, clear river, energy, {base_style}"
-    ]
-    prompts_altro = [
-        f"beautiful blue sky with white clouds, heaven light, {base_style}",
-        f"field of flowers, spring, colorful, creation beauty, {base_style}"
-    ]
+    if "consolazione" in cat:
+        return random.choice([f"peaceful sunset, {base_style}", f"forest path light, {base_style}"])
+    elif "esortazione" in cat:
+        return random.choice([f"majestic mountain, {base_style}", f"eagle sky, {base_style}"])
+    else:
+        return random.choice([f"blue sky clouds, {base_style}", f"flower field, {base_style}"])
 
-    if "consolazione" in cat: return random.choice(prompts_consolazione)
-    elif "esortazione" in cat: return random.choice(prompts_esortazione)
-    else: return random.choice(prompts_altro)
-
-# --- 3. GENERAZIONE IMMAGINE AI ---
+# --- 3. GENERAZIONE IMMAGINE ---
 def get_ai_image(prompt_text):
     print(f"🎨 Generazione immagine: {prompt_text}")
     try:
@@ -71,62 +60,46 @@ def get_ai_image(prompt_text):
 
 # --- 4. FONT ---
 def load_font(size):
-    fonts_to_try = [FONT_NAME, "DejaVuSans-Bold.ttf", "arial.ttf"]
-    for font_path in fonts_to_try:
-        try:
-            return ImageFont.truetype(font_path, size)
-        except: continue
-    return ImageFont.load_default()
+    try: return ImageFont.truetype(FONT_NAME, size)
+    except: return ImageFont.load_default()
 
-# --- 5. COMPOSIZIONE GRAFICA ---
+# --- 5. GRAFICA ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
-    
     overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     W, H = base_img.size
     
-    font_txt = load_font(100)  
-    font_ref = load_font(60)   
-
+    font_txt = load_font(100)
+    font_ref = load_font(60)
+    
     text = f"“{row['Frase']}”"
-    lines = textwrap.wrap(text, width=16) 
+    lines = textwrap.wrap(text, width=16)
     
+    # Calcoli dimensioni
     line_height = 110
-    text_block_height = len(lines) * line_height
-    ref_height = 80
-    total_content_height = text_block_height + ref_height
+    total_h = (len(lines) * line_height) + 80
+    start_y = ((H - total_h) / 2) - 150
     
-    start_y = ((H - total_content_height) / 2) - 150
-    
-    padding = 50
-    box_left = 40
-    box_top = start_y - padding
-    box_right = W - 40
-    box_bottom = start_y + total_content_height + padding
-    
-    draw.rectangle(
-        [(box_left, box_top), (box_right, box_bottom)], 
-        fill=(0, 0, 0, 140), 
-        outline=None
-    )
+    # Sfondo scuro
+    draw.rectangle([(40, start_y - 50), (W - 40, start_y + total_h + 50)], fill=(0, 0, 0, 140))
     
     final_img = Image.alpha_composite(base_img, overlay)
     draw_final = ImageDraw.Draw(final_img)
     
-    current_y = start_y
+    curr_y = start_y
     for line in lines:
         bbox = draw_final.textbbox((0, 0), line, font=font_txt)
         w = bbox[2] - bbox[0]
-        draw_final.text(((W - w)/2, current_y), line, font=font_txt, fill="white")
-        current_y += line_height
+        draw_final.text(((W - w)/2, curr_y), line, font=font_txt, fill="white")
+        curr_y += line_height
         
     ref = str(row['Riferimento'])
     bbox_ref = draw_final.textbbox((0, 0), ref, font=font_ref)
     w_ref = bbox_ref[2] - bbox_ref[0]
-    draw_final.text(((W - w_ref)/2, current_y + 25), ref, font=font_ref, fill="#FFD700")
-
+    draw_final.text(((W - w_ref)/2, curr_y + 25), ref, font=font_ref, fill="#FFD700")
+    
     return final_img
 
 # --- 6. LOGO ---
@@ -141,7 +114,22 @@ def add_logo(img):
         except: pass
     return img
 
-# --- 7. INVIO TELEGRAM & MAKE ---
+# --- 7. INVIO A MAKE (RIPRISTINATO) ---
+def trigger_make(row, img_bytes, cap):
+    print("📡 Tentativo invio a Make...")
+    try:
+        # Invia testo e immagine come file
+        files = {'upload_file': ('post.png', img_bytes, 'image/png')}
+        data = {
+            'categoria': row.get('Categoria'),
+            'frase': row.get('Frase'), 
+            'caption_completa': cap
+        }
+        res = requests.post(MAKE_WEBHOOK_URL, data=data, files=files)
+        print(f"✅ Make risponde: {res.status_code}")
+    except Exception as e: 
+        print(f"❌ Errore Make: {e}")
+
 def send_telegram(img, cap):
     if not TELEGRAM_TOKEN: return
     try:
@@ -149,133 +137,54 @@ def send_telegram(img, cap):
                       files={'photo': img}, data={'chat_id': TELEGRAM_CHAT_ID, 'caption': cap})
     except Exception as e: print(f"Errore Telegram: {e}")
 
-def trigger_make(row, img, cap):
-    try:
-        requests.post(MAKE_WEBHOOK_URL, 
-                      data={'categoria': row.get('Categoria'), 'frase': row.get('Frase'), 'caption_completa': cap},
-                      files={'upload_file': ('post.png', img, 'image/png')})
-    except Exception as e: print(f"Errore Make: {e}")
-
-# --- 8. LOGICA PRINCIPALE (MODIFICATA) ---
+# --- 8. LOGICA ---
 def esegui_bot():
     now = datetime.now(timezone.utc)
     hour = now.hour
     weekday = now.weekday()
-    
-    print(f"🕒 Orario UTC: {hour}:00 - Giorno: {weekday}")
+    print(f"🕒 Ore: {hour}, Giorno: {weekday}")
 
     row = None
     caption = ""
 
-    # REGOLA 1: MATTINA (05-08 UTC)
+    # Logica Orari
     if 5 <= hour <= 8:
-        print("☀️ Slot: MATTINA")
         row = get_random_verse()
-        if row is not None:
-            intro = random.choice(["🔥 Parola di Vita:", "🕊️ Guida dello Spirito:", "🙏 Per il tuo Cuore:"])
-            frase_extra = random.choice(["Dio ti benedica oggi.", "Sii forte nel Signore.", "Cammina per fede."])
-            caption = f"""✨ {str(row['Categoria']).upper()} ✨
-
-“{row['Frase']}”
-📖 {row['Riferimento']}
-
-────────────────
-{intro}
-{frase_extra}
-────────────────
-
-{INDIRIZZO_CHIESA}
-
-#fede #vangelodelgiorno #chiesa #gesù"""
-
-    # REGOLA 2: SABATO (09-22 UTC)
+        caption = f"✨ {str(row['Categoria']).upper()} ✨\n\n“{row['Frase']}”\n📖 {row['Riferimento']}\n\n{INDIRIZZO_CHIESA}\n\n#fede #vangelo"
     elif weekday == 5 and 9 <= hour <= 22:
-        print("🚨 Slot: SABATO")
-        row = get_random_verse("Esortazione")
-        if row is None: row = get_random_verse()
-        caption = f"""🚨 NON MANCARE DOMANI! 🚨
-
-Fratello, sorella! Domani è il giorno del Signore! 🙌
-Ti aspettiamo per lodare Dio insieme.
-
-🗓 **DOMANI DOMENICA**
-🕕 **ORE 18:00**
-{INDIRIZZO_CHIESA}
-
-Non venire da solo, porta un amico! Dio ha una parola per te. 🔥
-
-────────────────
-📖 *Parola per te:*
-“{row['Frase']}”
-({row['Riferimento']})
-────────────────
-
-#chiesa #grotte #fede #culto"""
-
-    # REGOLA 3: DOMENICA (15-17 UTC)
+        row = get_random_verse("Esortazione") or get_random_verse()
+        caption = f"🚨 DOMANI CULTO! 🚨\n\nVi aspettiamo alle 18:00!\n{INDIRIZZO_CHIESA}\n\n📖 “{row['Frase']}”\n\n#culto #chiesa"
     elif weekday == 6 and 15 <= hour <= 17:
-        print("⏳ Slot: DOMENICA")
         row = get_random_verse()
-        caption = f"""⏳ NON MANCARE, STA PER INIZIARE! ⏳
-
-Ci siamo quasi! Alle **18:00** iniziamo il culto. ❤️
-Lascia tutto e corri alla presenza di Dio!
-
-{INDIRIZZO_CHIESA}
-
-Gesù ti sta aspettando!
-
-────────────────
-📖 *La Parola:*
-“{row['Frase']}”
-({row['Riferimento']})
-────────────────
-
-#chiesa #grotte #culto #nonmancare"""
-
-    # --- MODIFICA FONDAMENTALE ---
-    # Se non siamo in nessuno degli orari sopra, significa che l'hai lanciato a mano!
-    # Invece di fermarsi, ora genera un post "generico".
+        caption = f"⏳ TRA POCO CULTO! ⏳\n\nIniziamo alle 18:00.\n{INDIRIZZO_CHIESA}\n\n📖 “{row['Frase']}”\n\n#domenica"
     else:
-        print("⚠️ Nessun orario schedulato rilevato. Eseguo in MODALITÀ MANUALE!")
+        # MODALITA' MANUALE (Test)
+        print("⚠️ Fuori orario: Modalità Test Attiva")
         row = get_random_verse()
-        if row is not None:
-            # Crea una caption standard che va bene sempre
-            caption = f"""✨ PAROLA DEL SIGNORE ✨
+        caption = f"✨ PAROLA DEL SIGNORE ✨\n\n“{row['Frase']}”\n📖 {row['Riferimento']}\n\n{INDIRIZZO_CHIESA}\n\n#test"
 
-“{row['Frase']}”
-📖 {row['Riferimento']}
-
-Dio ti benedica grandemente!
-
-────────────────
-{INDIRIZZO_CHIESA}
-
-#fede #bibbia #gesù #chiesa"""
-
-    # ESECUZIONE (Valida per tutti i casi sopra)
-    if row is not None and caption:
-        print(f"🚀 Generazione contenuto...")
-        img_final = add_logo(create_verse_image(row))
+    # ESECUZIONE
+    if row is not None:
+        print("🚀 Generazione...")
+        img = add_logo(create_verse_image(row))
         
-        # Buffer per invio immediato Telegram/Make
         buf = BytesIO()
-        img_final.save(buf, format='PNG')
+        img.save(buf, format='PNG')
         img_data = buf.getvalue()
-        
-        # 1. Invia a Telegram e Make
+
+        # 1. Telegram
         send_telegram(img_data, caption)
+        
+        # 2. MAKE (Tornato!)
         trigger_make(row, img_data, caption)
+
+        # 3. Salvataggio per n8n (Non si sa mai)
+        with open("output.txt", "w", encoding="utf-8") as f: f.write(caption)
+        img.save("immagine.png", format="PNG")
         
-        # 2. SALVATAGGIO SU DISCO PER GITHUB/N8N
-        with open("output.txt", "w", encoding="utf-8") as f:
-            f.write(caption)
-        
-        img_final.save("immagine.png", format="PNG")
-        
-        print("✅ Immagine e Testo salvati su disco per n8n.")
+        print("✅ Finito.")
     else:
-        print("❌ Errore: Nessun contenuto generato (Forse CSV vuoto?).")
+        print("❌ Errore.")
 
 if __name__ == "__main__":
     esegui_bot()
