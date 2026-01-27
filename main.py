@@ -10,7 +10,6 @@ from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timezone
 
 # --- CONFIGURAZIONE ---
-# NOTA: Facebook è stato rimosso qui perché lo gestirà n8n
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/hiunkuvfe8mjvfsgyeg0vck4j8dwx6h2"
@@ -157,7 +156,7 @@ def trigger_make(row, img, cap):
                       files={'upload_file': ('post.png', img, 'image/png')})
     except Exception as e: print(f"Errore Make: {e}")
 
-# --- 8. LOGICA PRINCIPALE ---
+# --- 8. LOGICA PRINCIPALE (MODIFICATA) ---
 def esegui_bot():
     now = datetime.now(timezone.utc)
     hour = now.hour
@@ -168,7 +167,7 @@ def esegui_bot():
     row = None
     caption = ""
 
-    # MATTINA (05-08 UTC)
+    # REGOLA 1: MATTINA (05-08 UTC)
     if 5 <= hour <= 8:
         print("☀️ Slot: MATTINA")
         row = get_random_verse()
@@ -189,7 +188,7 @@ def esegui_bot():
 
 #fede #vangelodelgiorno #chiesa #gesù"""
 
-    # SABATO (09-22 UTC)
+    # REGOLA 2: SABATO (09-22 UTC)
     elif weekday == 5 and 9 <= hour <= 22:
         print("🚨 Slot: SABATO")
         row = get_random_verse("Esortazione")
@@ -213,7 +212,7 @@ Non venire da solo, porta un amico! Dio ha una parola per te. 🔥
 
 #chiesa #grotte #fede #culto"""
 
-    # DOMENICA (15-17 UTC)
+    # REGOLA 3: DOMENICA (15-17 UTC)
     elif weekday == 6 and 15 <= hour <= 17:
         print("⏳ Slot: DOMENICA")
         row = get_random_verse()
@@ -234,11 +233,27 @@ Gesù ti sta aspettando!
 
 #chiesa #grotte #culto #nonmancare"""
 
+    # --- MODIFICA FONDAMENTALE ---
+    # Se non siamo in nessuno degli orari sopra, significa che l'hai lanciato a mano!
+    # Invece di fermarsi, ora genera un post "generico".
     else:
-        print("❌ Nessun orario valido. Il bot si ferma qui.")
-        return
+        print("⚠️ Nessun orario schedulato rilevato. Eseguo in MODALITÀ MANUALE!")
+        row = get_random_verse()
+        if row is not None:
+            # Crea una caption standard che va bene sempre
+            caption = f"""✨ PAROLA DEL SIGNORE ✨
 
-    # ESECUZIONE
+“{row['Frase']}”
+📖 {row['Riferimento']}
+
+Dio ti benedica grandemente!
+
+────────────────
+{INDIRIZZO_CHIESA}
+
+#fede #bibbia #gesù #chiesa"""
+
+    # ESECUZIONE (Valida per tutti i casi sopra)
     if row is not None and caption:
         print(f"🚀 Generazione contenuto...")
         img_final = add_logo(create_verse_image(row))
@@ -260,7 +275,7 @@ Gesù ti sta aspettando!
         
         print("✅ Immagine e Testo salvati su disco per n8n.")
     else:
-        print("❌ Nessun contenuto generato.")
+        print("❌ Errore: Nessun contenuto generato (Forse CSV vuoto?).")
 
 if __name__ == "__main__":
     esegui_bot()
