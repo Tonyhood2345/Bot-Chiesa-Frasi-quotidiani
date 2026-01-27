@@ -11,12 +11,15 @@ on:
     # 3. SOLO DOMENICA alle 17:00 Italiane (circa 16:00 UTC)
     - cron: '0 16 * * 0'
   
-  # Permette di avviarlo a mano se serve (pulsante "Run workflow")
+  # Permette di avviarlo a mano
   workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    # IMPORTANTE: Diamo i permessi per salvare l'immagine nel repo
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout repository
@@ -37,3 +40,53 @@ jobs:
         TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       run: python main.py
+
+    # -----------------------------------------------------------
+    # NUOVI STEP AGGIUNTI PER N8N
+    # -----------------------------------------------------------
+
+    - name: Commit & Push results
+      run: |
+        # Configura git
+        git config --global user.name "Bot Chiesa Action"
+        git config --global user.email "actions@github.com"
+        
+        # Aggiunge tutti i file generati (immagini/testo)
+        git add .
+        
+        # Fa il commit e il push solo se ci sono cambiamenti
+        git commit -m "Nuovo contenuto generato dal bot [skip ci]" || echo "Nessuna modifica da committare"
+        git push
+
+    - name: Send to n8n
+      if: success() # Esegue solo se il push è andato bene
+      run: |
+        # --- CONFIGURAZIONE (MODIFICA QUESTE 3 RIGHE) ---
+        GITHUB_USER="TuoUsernameGitHub"   # <--- INSERISCI IL TUO USERNAME
+        GITHUB_REPO="NomeTuoRepository"   # <--- INSERISCI IL NOME DEL REPO
+        FILE_TESTO="output.txt"           # <--- NOME DEL FILE DI TESTO GENERATO DA MAIN.PY
+        FILE_IMMAGINE="immagine.png"      # <--- NOME DELL'IMMAGINE GENERATA DA MAIN.PY
+        BRANCH="main"                     # (Di solito è main o master)
+        
+        # URL n8n (Ho rimosso "-test" per la produzione)
+        WEBHOOK_URL="https://antoniogiancani.app.n8n.cloud/webhook/0df08402-20dd-49aa-bd86-b3b69a64fe7b"
+        # ------------------------------------------------
+
+        # 1. Recupera il testo (se il file esiste, altrimenti mette un testo default)
+        if [ -f "$FILE_TESTO" ]; then
+            TEXT_CONTENT=$(cat "$FILE_TESTO")
+        else
+            TEXT_CONTENT="Nuovo aggiornamento dalla parrocchia!"
+        fi
+        
+        # 2. Costruisce l'URL pubblico (Raw) dell'immagine
+        # Aggiungiamo ?v=timestamp per evitare la cache di Facebook
+        IMAGE_URL="https://raw.githubusercontent.com/$GITHUB_USER/$GITHUB_REPO/$BRANCH/$FILE_IMMAGINE?v=$(date +%s)"
+        
+        echo "Invio dati a n8n..."
+        echo "Immagine: $IMAGE_URL"
+        
+        # 3. Invia la richiesta
+        curl -X POST "$WEBHOOK_URL" \
+          -H "Content-Type: application/json" \
+          -d "{\"text\": \"$TEXT_CONTENT\", \"image_url\": \"$IMAGE_URL\"}"
