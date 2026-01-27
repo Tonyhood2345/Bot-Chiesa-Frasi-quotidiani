@@ -264,3 +264,4 @@ Gesù ti sta aspettando!
 
 if __name__ == "__main__":
     esegui_bot()
+
