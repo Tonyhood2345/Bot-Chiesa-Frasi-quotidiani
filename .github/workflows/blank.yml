@@ -1,18 +1,24 @@
-name: Bot Chiesa Manuale e Automatico
+name: Bot Chiesa Automatico
 
 on:
-  # Questo attiva il bottone "Run workflow" per farlo partire ORA
-  workflow_dispatch:
-  
-  # Questo mantiene la programmazione automatica
   schedule:
-    - cron: '0 7 * * *'   # Tutti i giorni 08:00 IT
-    - cron: '0 10 * * 6'  # Sabato 11:00 IT
-    - cron: '0 16 * * 0'  # Domenica 17:00 IT
+    # 1. TUTTI I GIORNI alle 08:00 Italiane (circa 07:00 UTC)
+    - cron: '0 7 * * *'
+    
+    # 2. SOLO SABATO alle 11:00 Italiane (circa 10:00 UTC)
+    - cron: '0 10 * * 6'
+    
+    # 3. SOLO DOMENICA alle 17:00 Italiane (circa 16:00 UTC)
+    - cron: '0 16 * * 0'
+  
+  # Permette di avviarlo a mano con il pulsante "Run workflow"
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # FONDAMENTALE per salvare l'immagine nel tuo repo
 
     steps:
     - name: Checkout repository
@@ -29,7 +35,57 @@ jobs:
 
     - name: Run Bot Script
       env:
-        FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
         TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       run: python main.py
+
+    # -----------------------------------------------------------
+    # STEP: Salva i file generati (img/txt) nel tuo repository
+    # -----------------------------------------------------------
+    - name: Commit & Push results
+      run: |
+        git config --global user.name "Bot Chiesa Action"
+        git config --global user.email "actions@github.com"
+        
+        # Aggiunge i file generati
+        git add output.txt immagine.png
+        
+        # Salva e carica su GitHub
+        git commit -m "Contenuto generato dal bot [skip ci]" || echo "Nessuna modifica"
+        git push
+
+    # -----------------------------------------------------------
+    # STEP: Invia link e testo a n8n
+    # -----------------------------------------------------------
+    - name: Send to n8n
+      if: success()
+      run: |
+        # --- I TUOI DATI SONO GIA' INSERITI QUI ---
+        GITHUB_USER="Tonyhood2345"
+        GITHUB_REPO="Bot-Chiesa-Frasi-quotidiani"
+        BRANCH="main"
+        
+        # Il tuo webhook n8n
+        WEBHOOK_URL="https://antoniogiancani.app.n8n.cloud/webhook/0df08402-20dd-49aa-bd86-b3b69a64fe7b"
+        
+        FILE_TESTO="output.txt"
+        FILE_IMMAGINE="immagine.png"
+        # -----------------------------------------------
+
+        # Verifica se il bot ha creato il file di testo
+        if [ -f "$FILE_TESTO" ]; then
+            TEXT_CONTENT=$(cat "$FILE_TESTO")
+            
+            # Crea il link all'immagine che n8n userà
+            # Aggiungiamo ?v=data per evitare che Facebook usi vecchie foto dalla cache
+            IMAGE_URL="https://raw.githubusercontent.com/$GITHUB_USER/$GITHUB_REPO/$BRANCH/$FILE_IMMAGINE?v=$(date +%s)"
+            
+            echo "Invio dati a n8n..."
+            echo "URL Immagine: $IMAGE_URL"
+            
+            curl -X POST "$WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d "{\"text\": \"$TEXT_CONTENT\", \"image_url\": \"$IMAGE_URL\"}"
+        else
+            echo "Nessun output trovato (forse non era l'ora giusta). Nessun invio a n8n."
+        fi
