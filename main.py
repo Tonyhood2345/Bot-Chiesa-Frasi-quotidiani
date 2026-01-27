@@ -5,16 +5,14 @@ import matplotlib
 matplotlib.use('Agg') 
 import textwrap
 import random
-import json
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timezone
 
 # --- CONFIGURAZIONE ---
-FACEBOOK_TOKEN = os.environ.get("FACEBOOK_TOKEN")
+# NOTA: Facebook è stato rimosso qui perché lo gestirà n8n
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-PAGE_ID = "1479209002311050"
 MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/hiunkuvfe8mjvfsgyeg0vck4j8dwx6h2"
 
 CSV_FILE = "Frasichiesa.csv"
@@ -22,7 +20,7 @@ LOGO_PATH = "logo.png"
 FONT_NAME = "arial.ttf" 
 INDIRIZZO_CHIESA = "📍 Chiesa Evangelica Eterno Nostra Giustizia\nPiazza Umberto, Grotte (AG)"
 
-# --- 1. GESTIONE DATI ---
+# --- 1. LETTURA DATI ---
 def get_random_verse(filtro_categoria=None):
     try:
         df = pd.read_csv(CSV_FILE)
@@ -35,7 +33,7 @@ def get_random_verse(filtro_categoria=None):
         print(f"⚠️ Errore lettura CSV: {e}")
         return None
 
-# --- 2. GENERATORE PROMPT (Tuo Originale) ---
+# --- 2. PROMPT AI ---
 def get_image_prompt(categoria):
     cat = str(categoria).lower().strip()
     base_style = "bright, divine light, photorealistic, 8k, sun rays, cinematic"
@@ -59,20 +57,20 @@ def get_image_prompt(categoria):
     elif "esortazione" in cat: return random.choice(prompts_esortazione)
     else: return random.choice(prompts_altro)
 
-# --- 3. AI & IMMAGINI ---
+# --- 3. GENERAZIONE IMMAGINE AI ---
 def get_ai_image(prompt_text):
     print(f"🎨 Generazione immagine: {prompt_text}")
     try:
         clean_prompt = prompt_text.replace(" ", "%20")
         url = f"https://image.pollinations.ai/prompt/{clean_prompt}?width=1080&height=1080&nologo=true"
-        response = requests.get(url, timeout=30)
+        response = requests.get(url, timeout=60)
         if response.status_code == 200:
             return Image.open(BytesIO(response.content)).convert("RGBA")
     except Exception as e:
         print(f"⚠️ Errore AI: {e}")
     return Image.new('RGBA', (1080, 1080), (50, 50, 70))
 
-# --- 4. FUNZIONE CARICAMENTO FONT ---
+# --- 4. FONT ---
 def load_font(size):
     fonts_to_try = [FONT_NAME, "DejaVuSans-Bold.ttf", "arial.ttf"]
     for font_path in fonts_to_try:
@@ -81,7 +79,7 @@ def load_font(size):
         except: continue
     return ImageFont.load_default()
 
-# --- 5. CREAZIONE IMMAGINE (Tua Originale) ---
+# --- 5. COMPOSIZIONE GRAFICA ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
@@ -90,12 +88,10 @@ def create_verse_image(row):
     draw = ImageDraw.Draw(overlay)
     W, H = base_img.size
     
-    # Font Grande come richiesto
     font_txt = load_font(100)  
     font_ref = load_font(60)   
 
     text = f"“{row['Frase']}”"
-    # Width 16 come richiesto
     lines = textwrap.wrap(text, width=16) 
     
     line_height = 110
@@ -111,7 +107,6 @@ def create_verse_image(row):
     box_right = W - 40
     box_bottom = start_y + total_content_height + padding
     
-    # Rettangolo Originale
     draw.rectangle(
         [(box_left, box_top), (box_right, box_bottom)], 
         fill=(0, 0, 0, 140), 
@@ -147,20 +142,13 @@ def add_logo(img):
         except: pass
     return img
 
-# --- 7. INVIO SOCIAL & WEBHOOK ---
+# --- 7. INVIO TELEGRAM & MAKE ---
 def send_telegram(img, cap):
     if not TELEGRAM_TOKEN: return
     try:
         requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto", 
                       files={'photo': img}, data={'chat_id': TELEGRAM_CHAT_ID, 'caption': cap})
     except Exception as e: print(f"Errore Telegram: {e}")
-
-def post_facebook(img, msg):
-    if not FACEBOOK_TOKEN: return
-    try:
-        requests.post(f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos?access_token={FACEBOOK_TOKEN}",
-                      files={'file': img}, data={'message': msg, 'published': 'true'})
-    except Exception as e: print(f"Errore Facebook: {e}")
 
 def trigger_make(row, img, cap):
     try:
@@ -169,27 +157,24 @@ def trigger_make(row, img, cap):
                       files={'upload_file': ('post.png', img, 'image/png')})
     except Exception as e: print(f"Errore Make: {e}")
 
-# --- 8. LOGICA DI SELEZIONE POST (SCHEDULING) ---
+# --- 8. LOGICA PRINCIPALE ---
 def esegui_bot():
-    # Ottieni l'ora attuale in UTC (GitHub usa UTC)
     now = datetime.now(timezone.utc)
-    hour = now.hour # 0-23
-    weekday = now.weekday() # 0=Lun, 5=Sab, 6=Dom
+    hour = now.hour
+    weekday = now.weekday()
     
-    print(f"🕒 Orario UTC rilevato: {hour}:00 - Giorno: {weekday}")
+    print(f"🕒 Orario UTC: {hour}:00 - Giorno: {weekday}")
 
     row = None
     caption = ""
 
-    # REGOLA 1: MATTINA PRESTO (Tutti i giorni, 05-08 UTC)
+    # MATTINA (05-08 UTC)
     if 5 <= hour <= 8:
-        print("☀️ Rilevato slot: MATTINA (Versetto del giorno)")
+        print("☀️ Slot: MATTINA")
         row = get_random_verse()
         if row is not None:
             intro = random.choice(["🔥 Parola di Vita:", "🕊️ Guida dello Spirito:", "🙏 Per il tuo Cuore:"])
             frase_extra = random.choice(["Dio ti benedica oggi.", "Sii forte nel Signore.", "Cammina per fede."])
-            
-            # TRIPLE VIRGOLETTE: Niente errori di sintassi
             caption = f"""✨ {str(row['Categoria']).upper()} ✨
 
 “{row['Frase']}”
@@ -204,13 +189,11 @@ def esegui_bot():
 
 #fede #vangelodelgiorno #chiesa #gesù"""
 
-    # REGOLA 2: SABATO (Invito)
-    # NOTA: Impostato fino alle 22 UTC per il test
+    # SABATO (09-22 UTC)
     elif weekday == 5 and 9 <= hour <= 22:
-        print("🚨 Rilevato slot: SABATO (Invito)")
+        print("🚨 Slot: SABATO")
         row = get_random_verse("Esortazione")
         if row is None: row = get_random_verse()
-        
         caption = f"""🚨 NON MANCARE DOMANI! 🚨
 
 Fratello, sorella! Domani è il giorno del Signore! 🙌
@@ -230,11 +213,10 @@ Non venire da solo, porta un amico! Dio ha una parola per te. 🔥
 
 #chiesa #grotte #fede #culto"""
 
-    # REGOLA 3: DOMENICA POMERIGGIO (Reminder, 15-17 UTC)
+    # DOMENICA (15-17 UTC)
     elif weekday == 6 and 15 <= hour <= 17:
-        print("⏳ Rilevato slot: DOMENICA (Reminder)")
+        print("⏳ Slot: DOMENICA")
         row = get_random_verse()
-        
         caption = f"""⏳ NON MANCARE, STA PER INIZIARE! ⏳
 
 Ci siamo quasi! Alle **18:00** iniziamo il culto. ❤️
@@ -253,25 +235,32 @@ Gesù ti sta aspettando!
 #chiesa #grotte #culto #nonmancare"""
 
     else:
-        print("❌ Nessuno slot orario corrispondente trovato. Il bot non farà nulla.")
+        print("❌ Nessun orario valido. Il bot si ferma qui.")
         return
 
     # ESECUZIONE
     if row is not None and caption:
-        print(f"🚀 Invio in corso... (Versetto: {row['Riferimento']})")
-        # Qui usa la TUA grafica originale con il logo
-        img = add_logo(create_verse_image(row))
+        print(f"🚀 Generazione contenuto...")
+        img_final = add_logo(create_verse_image(row))
         
+        # Buffer per invio immediato Telegram/Make
         buf = BytesIO()
-        img.save(buf, format='PNG')
+        img_final.save(buf, format='PNG')
         img_data = buf.getvalue()
         
+        # 1. Invia a Telegram e Make
         send_telegram(img_data, caption)
-        post_facebook(img_data, caption)
         trigger_make(row, img_data, caption)
-        print("✅ Tutto inviato correttamente!")
+        
+        # 2. SALVATAGGIO SU DISCO PER GITHUB/N8N
+        with open("output.txt", "w", encoding="utf-8") as f:
+            f.write(caption)
+        
+        img_final.save("immagine.png", format="PNG")
+        
+        print("✅ Immagine e Testo salvati su disco per n8n.")
     else:
-        print("❌ Errore: Nessun contenuto generato.")
+        print("❌ Nessun contenuto generato.")
 
 if __name__ == "__main__":
     esegui_bot()
