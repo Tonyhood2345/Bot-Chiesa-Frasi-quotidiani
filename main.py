@@ -86,8 +86,8 @@ def create_verse_image(row):
     W, H = base_img.size
     
     # --- NUOVE DIMENSIONI MAXI ---
-    font_size_main = 200  # Aumentato drasticamente per leggibilità
-    font_size_ref = 100    
+    font_size_main = 1100  # Aumentato drasticamente per leggibilità
+    font_size_ref = 180    
     
     font_txt = load_font(font_size_main)
     font_ref = load_font(font_size_ref)
