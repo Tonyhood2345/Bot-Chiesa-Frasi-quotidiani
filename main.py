@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timezone
 
 # --- CONFIGURAZIONE ---
-# ⚠️ ATTENZIONE: Se lo script non invia a Telegram, inserisci i dati qui sotto tra le virgolette!
+# ⚠️ INSERISCI I TUOI DATI QUI SE NON USI LE VARIABILI D'AMBIENTE
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN") or "INSERISCI_QUI_IL_TUO_TOKEN"
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or "INSERISCI_QUI_IL_TUO_ID"
 
@@ -19,6 +19,10 @@ MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/hiunkuvfe8mjvfsgyeg0vck4j8dwx6h2"
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
 INDIRIZZO_CHIESA = "📍 Chiesa Evangelica Eterno Nostra Giustizia\nPiazza Umberto, Grotte (AG)"
+
+# URL per scaricare il font automaticamente se manca
+FONT_URL = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf"
+FONT_NAME = "Roboto-Bold.ttf"
 
 # --- 1. LETTURA DATI ---
 def get_random_verse(filtro_categoria=None):
@@ -57,18 +61,27 @@ def get_ai_image(prompt_text):
         print(f"⚠️ Errore AI: {e}")
     return Image.new('RGBA', (1080, 1080), (50, 50, 70))
 
-# --- 4. FONT ---
+# --- 4. FONT (NUOVO: SCARICA AUTOMATICAMENTE ROBOTO) ---
 def load_font(size):
+    # Controlla se il font esiste, altrimenti lo scarica
+    if not os.path.exists(FONT_NAME):
+        print("⬇️ Font mancante. Download in corso...")
+        try:
+            r = requests.get(FONT_URL)
+            with open(FONT_NAME, 'wb') as f:
+                f.write(r.content)
+            print("✅ Font scaricato!")
+        except Exception as e:
+            print(f"⚠️ Impossibile scaricare il font: {e}. Uso default.")
+            return ImageFont.load_default()
+    
     try:
-        return ImageFont.load_default(size=size)
-    except TypeError:
-        print("⚠️ Attenzione: Aggiorna Pillow per dimensionare il font di default.")
-        return ImageFont.load_default()
+        return ImageFont.truetype(FONT_NAME, size)
     except Exception as e:
-        print(f"⚠️ Errore Font: {e}")
+        print(f"⚠️ Errore caricamento font: {e}")
         return ImageFont.load_default()
 
-# --- 5. GRAFICA (CORRETTA: TESTO ORDINATO E PIÙ PICCOLO) ---
+# --- 5. GRAFICA (CALIBRATA PER IL NUOVO FONT) ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
@@ -76,22 +89,20 @@ def create_verse_image(row):
     draw = ImageDraw.Draw(overlay)
     W, H = base_img.size
     
-    # --- MODIFICA 1: DIMENSIONI FONT RIDOTTE PER ORDINE ---
-    font_size_main = 95   # Era 150 (troppo grande), ora 95 è bilanciato
-    font_size_ref = 55    # Era 70, ridotto in proporzione
+    # --- DIMENSIONI NUOVE (Adattate al font Roboto) ---
+    font_size_main = 80   # Leggermente ridotto perché Roboto è "grosso"
+    font_size_ref = 45    
     
     font_txt = load_font(font_size_main)
     font_ref = load_font(font_size_ref)
     
     text = f"“{row['Frase']}”"
     
-    # --- MODIFICA 2: WRAP PIÙ LARGO ---
-    # Aumentato a 22 caratteri per riga (invece di 12).
-    # Questo evita che le parole vengano spezzate a metà.
-    lines = textwrap.wrap(text, width=22)
+    # Wrap a 20 caratteri per mantenere l'ordine
+    lines = textwrap.wrap(text, width=20)
     
     # Calcoli dimensioni
-    line_height = font_size_main + 25 
+    line_height = font_size_main + 20 
     total_h = (len(lines) * line_height) + 80
     start_y = ((H - total_h) / 2) - 60
     
@@ -127,7 +138,7 @@ def add_logo(img):
         except: pass
     return img
 
-# --- 7. INVIO A MAKE ---
+# --- 7. INVIO A MAKE E TELEGRAM ---
 def trigger_make(row, img_bytes, cap):
     print("📡 Tentativo invio a Make...")
     try:
@@ -143,22 +154,17 @@ def trigger_make(row, img_bytes, cap):
         print(f"❌ Errore Make: {e}")
 
 def send_telegram(img, cap):
-    # Controllo se i dati sono stati inseriti
     if not TELEGRAM_TOKEN or "INSERISCI" in TELEGRAM_TOKEN:
-        print("❌ ERRORE: Token Telegram mancante! Inseriscilo in alto nello script.")
+        print("⚠️ Token Telegram mancante.")
         return
-    if not TELEGRAM_CHAT_ID or "INSERISCI" in TELEGRAM_CHAT_ID:
-        print("❌ ERRORE: Chat ID Telegram mancante! Inseriscilo in alto nello script.")
-        return
-
     try:
-        print("📡 Invio a Telegram in corso...")
+        print("📡 Invio a Telegram...")
         res = requests.post(
             f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto", 
             files={'photo': img}, 
             data={'chat_id': TELEGRAM_CHAT_ID, 'caption': cap}
         )
-        print(f"Telegram Risposta: {res.status_code} - {res.text}")
+        print(f"Telegram status: {res.status_code}")
     except Exception as e: 
         print(f"❌ Errore Telegram: {e}")
 
