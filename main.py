@@ -13,12 +13,11 @@ from datetime import datetime, timezone
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-# IL TUO LINK DI MAKE (L'ho rimesso qui)
 MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/hiunkuvfe8mjvfsgyeg0vck4j8dwx6h2"
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
-FONT_NAME = "arial.ttf" 
+# FONT_NAME rimosso perché usiamo il default generico
 INDIRIZZO_CHIESA = "📍 Chiesa Evangelica Eterno Nostra Giustizia\nPiazza Umberto, Grotte (AG)"
 
 # --- 1. LETTURA DATI ---
@@ -58,12 +57,20 @@ def get_ai_image(prompt_text):
         print(f"⚠️ Errore AI: {e}")
     return Image.new('RGBA', (1080, 1080), (50, 50, 70))
 
-# --- 4. FONT ---
+# --- 4. FONT (MODIFICATO PER GENERICO + GRANDE) ---
 def load_font(size):
-    try: return ImageFont.truetype(FONT_NAME, size)
-    except: return ImageFont.load_default()
+    try:
+        # Tenta di caricare il font di default scalabile (Richiede Pillow >= 10.0.0)
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        # Fallback per vecchie versioni di Pillow (o se size non è supportato)
+        print("⚠️ Attenzione: Aggiorna Pillow per dimensionare il font di default.")
+        return ImageFont.load_default()
+    except Exception as e:
+        print(f"⚠️ Errore Font: {e}")
+        return ImageFont.load_default()
 
-# --- 5. GRAFICA ---
+# --- 5. GRAFICA (MODIFICATO PER TESTO PIÙ GRANDE) ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
@@ -71,19 +78,25 @@ def create_verse_image(row):
     draw = ImageDraw.Draw(overlay)
     W, H = base_img.size
     
-    font_txt = load_font(100)
-    font_ref = load_font(60)
+    # --- DIMENSIONI FONT AUMENTATE ---
+    font_size_main = 150  # Era 100
+    font_size_ref = 70    # Era 60
+    
+    font_txt = load_font(font_size_main)
+    font_ref = load_font(font_size_ref)
     
     text = f"“{row['Frase']}”"
-    lines = textwrap.wrap(text, width=16)
     
-    # Calcoli dimensioni
-    line_height = 110
-    total_h = (len(lines) * line_height) + 80
-    start_y = ((H - total_h) / 2) - 150
+    # Riduco la larghezza del wrap perché il font è più grande (12 caratteri invece di 16)
+    lines = textwrap.wrap(text, width=12)
     
-    # Sfondo scuro
-    draw.rectangle([(40, start_y - 50), (W - 40, start_y + total_h + 50)], fill=(0, 0, 0, 140))
+    # Calcoli dimensioni aumentati
+    line_height = font_size_main + 40 # Spazio tra le righe aumentato (circa 190px)
+    total_h = (len(lines) * line_height) + 100
+    start_y = ((H - total_h) / 2) - 100
+    
+    # Sfondo scuro adattato
+    draw.rectangle([(20, start_y - 40), (W - 20, start_y + total_h + 60)], fill=(0, 0, 0, 150))
     
     final_img = Image.alpha_composite(base_img, overlay)
     draw_final = ImageDraw.Draw(final_img)
@@ -98,7 +111,8 @@ def create_verse_image(row):
     ref = str(row['Riferimento'])
     bbox_ref = draw_final.textbbox((0, 0), ref, font=font_ref)
     w_ref = bbox_ref[2] - bbox_ref[0]
-    draw_final.text(((W - w_ref)/2, curr_y + 25), ref, font=font_ref, fill="#FFD700")
+    # Sposto il riferimento un po' più in basso
+    draw_final.text(((W - w_ref)/2, curr_y + 30), ref, font=font_ref, fill="#FFD700")
     
     return final_img
 
@@ -114,11 +128,10 @@ def add_logo(img):
         except: pass
     return img
 
-# --- 7. INVIO A MAKE (RIPRISTINATO) ---
+# --- 7. INVIO A MAKE ---
 def trigger_make(row, img_bytes, cap):
     print("📡 Tentativo invio a Make...")
     try:
-        # Invia testo e immagine come file
         files = {'upload_file': ('post.png', img_bytes, 'image/png')}
         data = {
             'categoria': row.get('Categoria'),
@@ -175,10 +188,10 @@ def esegui_bot():
         # 1. Telegram
         send_telegram(img_data, caption)
         
-        # 2. MAKE (Tornato!)
+        # 2. MAKE
         trigger_make(row, img_data, caption)
 
-        # 3. Salvataggio per n8n (Non si sa mai)
+        # 3. Salvataggio locale
         with open("output.txt", "w", encoding="utf-8") as f: f.write(caption)
         img.save("immagine.png", format="PNG")
         
@@ -188,4 +201,3 @@ def esegui_bot():
 
 if __name__ == "__main__":
     esegui_bot()
-
