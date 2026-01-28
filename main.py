@@ -1,4 +1,74 @@
-# --- 5. GRAFICA (SISTEMATA PER UN LOOK PIÙ ORDINATO) ---
+import os
+import requests
+import pandas as pd
+import matplotlib
+matplotlib.use('Agg') 
+import textwrap
+import random
+from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
+from datetime import datetime, timezone
+
+# --- CONFIGURAZIONE ---
+# ⚠️ ATTENZIONE: Se lo script non invia a Telegram, inserisci i dati qui sotto tra le virgolette!
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN") or "INSERISCI_QUI_IL_TUO_TOKEN"
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or "INSERISCI_QUI_IL_TUO_ID"
+
+MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/hiunkuvfe8mjvfsgyeg0vck4j8dwx6h2"
+
+CSV_FILE = "Frasichiesa.csv"
+LOGO_PATH = "logo.png"
+INDIRIZZO_CHIESA = "📍 Chiesa Evangelica Eterno Nostra Giustizia\nPiazza Umberto, Grotte (AG)"
+
+# --- 1. LETTURA DATI ---
+def get_random_verse(filtro_categoria=None):
+    try:
+        df = pd.read_csv(CSV_FILE)
+        if df.empty: return None
+        if filtro_categoria:
+            df_filtered = df[df['Categoria'].astype(str).str.contains(filtro_categoria, case=False, na=False)]
+            if not df_filtered.empty: return df_filtered.sample(1).iloc[0]
+        return df.sample(1).iloc[0]
+    except Exception as e:
+        print(f"⚠️ Errore lettura CSV: {e}")
+        return None
+
+# --- 2. PROMPT AI ---
+def get_image_prompt(categoria):
+    cat = str(categoria).lower().strip()
+    base_style = "bright, divine light, photorealistic, 8k, sun rays, cinematic"
+    if "consolazione" in cat:
+        return random.choice([f"peaceful sunset, {base_style}", f"forest path light, {base_style}"])
+    elif "esortazione" in cat:
+        return random.choice([f"majestic mountain, {base_style}", f"eagle sky, {base_style}"])
+    else:
+        return random.choice([f"blue sky clouds, {base_style}", f"flower field, {base_style}"])
+
+# --- 3. GENERAZIONE IMMAGINE ---
+def get_ai_image(prompt_text):
+    print(f"🎨 Generazione immagine: {prompt_text}")
+    try:
+        clean_prompt = prompt_text.replace(" ", "%20")
+        url = f"https://image.pollinations.ai/prompt/{clean_prompt}?width=1080&height=1080&nologo=true"
+        response = requests.get(url, timeout=60)
+        if response.status_code == 200:
+            return Image.open(BytesIO(response.content)).convert("RGBA")
+    except Exception as e:
+        print(f"⚠️ Errore AI: {e}")
+    return Image.new('RGBA', (1080, 1080), (50, 50, 70))
+
+# --- 4. FONT ---
+def load_font(size):
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        print("⚠️ Attenzione: Aggiorna Pillow per dimensionare il font di default.")
+        return ImageFont.load_default()
+    except Exception as e:
+        print(f"⚠️ Errore Font: {e}")
+        return ImageFont.load_default()
+
+# --- 5. GRAFICA (CORRETTA: TESTO ORDINATO E PIÙ PICCOLO) ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
@@ -6,34 +76,26 @@ def create_verse_image(row):
     draw = ImageDraw.Draw(overlay)
     W, H = base_img.size
     
-    # --- NUOVE DIMENSIONI FONT (Ridotte per ordine) ---
-    # Ho ridotto il font principale da 150 a 95 per farlo assomigliare alla seconda immagine.
-    font_size_main = 95  
-    # Ho ridotto proporzionalmente anche il riferimento.
-    font_size_ref = 55   
+    # --- MODIFICA 1: DIMENSIONI FONT RIDOTTE PER ORDINE ---
+    font_size_main = 95   # Era 150 (troppo grande), ora 95 è bilanciato
+    font_size_ref = 55    # Era 70, ridotto in proporzione
     
     font_txt = load_font(font_size_main)
     font_ref = load_font(font_size_ref)
     
     text = f"“{row['Frase']}”"
     
-    # --- MODIFICA FONDAMENTALE AL WRAP ---
-    # Poiché il font è più piccolo, possiamo aumentare il numero di caratteri per riga.
-    # Passando da width=12 a width=20 (o 22), le parole non verranno più spezzate a metà
-    # e il testo risulterà più compatto orizzontalmente.
-    lines = textwrap.wrap(text, width=22) 
+    # --- MODIFICA 2: WRAP PIÙ LARGO ---
+    # Aumentato a 22 caratteri per riga (invece di 12).
+    # Questo evita che le parole vengano spezzate a metà.
+    lines = textwrap.wrap(text, width=22)
     
     # Calcoli dimensioni
-    # Spazio tra le righe (font size + un po' di respiro)
     line_height = font_size_main + 25 
     total_h = (len(lines) * line_height) + 80
-    
-    # Calcolo punto di inizio Y per centrare verticalmente.
-    # Il "- 60" serve a spostare il blocco leggermente in alto per fare spazio al logo in basso.
     start_y = ((H - total_h) / 2) - 60
     
-    # Sfondo scuro adattato al nuovo blocco di testo
-    # Ho stretto i margini verticali (start_y - 30 invece di -40)
+    # Sfondo scuro
     draw.rectangle([(40, start_y - 30), (W - 40, start_y + total_h + 40)], fill=(0, 0, 0, 140))
     
     final_img = Image.alpha_composite(base_img, overlay)
@@ -43,14 +105,111 @@ def create_verse_image(row):
     for line in lines:
         bbox = draw_final.textbbox((0, 0), line, font=font_txt)
         w = bbox[2] - bbox[0]
-        # Disegno la riga centrata orizzontalmente
         draw_final.text(((W - w)/2, curr_y), line, font=font_txt, fill="white")
         curr_y += line_height
         
     ref = str(row['Riferimento'])
     bbox_ref = draw_final.textbbox((0, 0), ref, font=font_ref)
     w_ref = bbox_ref[2] - bbox_ref[0]
-    # Sposto il riferimento un po' più in basso rispetto all'ultima riga di testo
     draw_final.text(((W - w_ref)/2, curr_y + 20), ref, font=font_ref, fill="#FFD700")
     
     return final_img
+
+# --- 6. LOGO ---
+def add_logo(img):
+    if os.path.exists(LOGO_PATH):
+        try:
+            logo = Image.open(LOGO_PATH).convert("RGBA")
+            w = int(img.width * 0.20)
+            h = int(w * (logo.height / logo.width))
+            logo = logo.resize((w, h))
+            img.paste(logo, ((img.width - w)//2, img.height - h - 30), logo)
+        except: pass
+    return img
+
+# --- 7. INVIO A MAKE ---
+def trigger_make(row, img_bytes, cap):
+    print("📡 Tentativo invio a Make...")
+    try:
+        files = {'upload_file': ('post.png', img_bytes, 'image/png')}
+        data = {
+            'categoria': row.get('Categoria'),
+            'frase': row.get('Frase'), 
+            'caption_completa': cap
+        }
+        res = requests.post(MAKE_WEBHOOK_URL, data=data, files=files)
+        print(f"✅ Make risponde: {res.status_code}")
+    except Exception as e: 
+        print(f"❌ Errore Make: {e}")
+
+def send_telegram(img, cap):
+    # Controllo se i dati sono stati inseriti
+    if not TELEGRAM_TOKEN or "INSERISCI" in TELEGRAM_TOKEN:
+        print("❌ ERRORE: Token Telegram mancante! Inseriscilo in alto nello script.")
+        return
+    if not TELEGRAM_CHAT_ID or "INSERISCI" in TELEGRAM_CHAT_ID:
+        print("❌ ERRORE: Chat ID Telegram mancante! Inseriscilo in alto nello script.")
+        return
+
+    try:
+        print("📡 Invio a Telegram in corso...")
+        res = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto", 
+            files={'photo': img}, 
+            data={'chat_id': TELEGRAM_CHAT_ID, 'caption': cap}
+        )
+        print(f"Telegram Risposta: {res.status_code} - {res.text}")
+    except Exception as e: 
+        print(f"❌ Errore Telegram: {e}")
+
+# --- 8. LOGICA ---
+def esegui_bot():
+    now = datetime.now(timezone.utc)
+    hour = now.hour
+    weekday = now.weekday()
+    print(f"🕒 Ore: {hour}, Giorno: {weekday}")
+
+    row = None
+    caption = ""
+
+    # Logica Orari
+    if 5 <= hour <= 8:
+        row = get_random_verse()
+        caption = f"✨ {str(row['Categoria']).upper()} ✨\n\n“{row['Frase']}”\n📖 {row['Riferimento']}\n\n{INDIRIZZO_CHIESA}\n\n#fede #vangelo"
+    elif weekday == 5 and 9 <= hour <= 22:
+        row = get_random_verse("Esortazione") or get_random_verse()
+        caption = f"🚨 DOMANI CULTO! 🚨\n\nVi aspettiamo alle 18:00!\n{INDIRIZZO_CHIESA}\n\n📖 “{row['Frase']}”\n\n#culto #chiesa"
+    elif weekday == 6 and 15 <= hour <= 17:
+        row = get_random_verse()
+        caption = f"⏳ TRA POCO CULTO! ⏳\n\nIniziamo alle 18:00.\n{INDIRIZZO_CHIESA}\n\n📖 “{row['Frase']}”\n\n#domenica"
+    else:
+        # MODALITA' MANUALE (Test)
+        print("⚠️ Fuori orario: Modalità Test Attiva")
+        row = get_random_verse()
+        caption = f"✨ PAROLA DEL SIGNORE ✨\n\n“{row['Frase']}”\n📖 {row['Riferimento']}\n\n{INDIRIZZO_CHIESA}\n\n#test"
+
+    # ESECUZIONE
+    if row is not None:
+        print("🚀 Generazione...")
+        img = add_logo(create_verse_image(row))
+        
+        buf = BytesIO()
+        img.save(buf, format='PNG')
+        img_data = buf.getvalue()
+
+        # 1. Telegram
+        send_telegram(img_data, caption)
+        
+        # 2. MAKE
+        trigger_make(row, img_data, caption)
+
+        # 3. Salvataggio locale
+        with open("output.txt", "w", encoding="utf-8") as f: f.write(caption)
+        img.save("immagine.png", format="PNG")
+        
+        print("✅ Finito.")
+    else:
+        print("❌ Errore.")
+
+if __name__ == "__main__":
+    esegui_bot()
