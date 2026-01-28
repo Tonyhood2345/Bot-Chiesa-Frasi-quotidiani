@@ -1,6 +1,43 @@
 import os
-import subprocess
 import sys
+import subprocess
+
+# --- 0. INSTALLAZIONE FORZATA DELLA VERSIONE VECCHIA (1.0.3) ---
+# Questo blocco serve a correggere l'errore "No module named moviepy.editor"
+def install_package(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+def uninstall_package(package):
+    subprocess.call([sys.executable, "-m", "pip", "uninstall", "-y", package])
+
+try:
+    # Proviamo a vedere che versione c'è
+    import moviepy
+    version = moviepy.__version__
+    print(f"ℹ️ Versione MoviePy trovata: {version}")
+    
+    # Se la versione inizia con "2", è quella sbagliata. La cancelliamo.
+    if version.startswith("2"):
+        print("⚠️ Versione 2.x incompatibile trovata. Disinstallazione in corso...")
+        uninstall_package("moviepy")
+        raise ImportError # Forziamo la reinstallazione
+except (ImportError, AttributeError, ModuleNotFoundError):
+    print("⬇️ Installazione MoviePy 1.0.3 (Versione Stabile)...")
+    install_package("moviepy==1.0.3")
+    install_package("decorator==4.4.2")
+    install_package("imageio==2.4.1")
+    # Trucco per ricaricare le librerie appena installate senza riavviare
+    if "moviepy" in sys.modules: del sys.modules["moviepy"]
+    if "moviepy.editor" in sys.modules: del sys.modules["moviepy.editor"]
+
+# ORA che abbiamo la versione giusta, possiamo importare
+try:
+    from moviepy.editor import ImageClip, AudioFileClip
+except ImportError:
+    # Se fallisce ancora, riprova l'installazione brute-force
+    install_package("moviepy==1.0.3")
+    from moviepy.editor import ImageClip, AudioFileClip
+
 import requests
 import pandas as pd
 import matplotlib
@@ -10,29 +47,6 @@ import random
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timezone
-
-# --- 0. BLOCCO DI RIPARAZIONE (FORZA VERSIONE 1.0.3) ---
-# Questo blocco deve stare IN CIMA, prima di qualsiasi import di moviepy
-def force_install_compatible_versions():
-    print("🔧 VERIFICA VERSIONI IN CORSO...")
-    try:
-        import moviepy
-        # Se c'è moviepy 2.0 o superiore, non va bene per questo script
-        if moviepy.__version__.startswith("2"):
-            print(f"⚠️ Rilevata versione incompatibile ({moviepy.__version__}). Eseguo downgrade...")
-            raise ImportError
-    except (ImportError, AttributeError, ModuleNotFoundError):
-        print("⬇️ Installazione forzata di MoviePy 1.0.3 (Versione stabile)...")
-        # Disinstalla versione errata e installa quella giusta
-        subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "moviepy"], capture_output=True)
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "moviepy==1.0.3", "decorator==4.4.2", "imageio==2.4.1"])
-        print("✅ Librerie corrette installate.")
-
-# Eseguiamo il controllo PRIMA di importare
-force_install_compatible_versions()
-
-# Ora possiamo importare in sicurezza
-from moviepy.editor import ImageClip, AudioFileClip
 
 # --- CONFIGURAZIONE ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN") or "INSERISCI_QUI_IL_TUO_TOKEN"
@@ -45,7 +59,6 @@ INDIRIZZO_CHIESA = "📍 Chiesa Evangelica Eterno Nostra Giustizia\nPiazza Umber
 
 # Nomi file
 AUDIO_FILENAME = "musica.mp3"
-# Link a un brano Royalty Free (Piano Ambient)
 AUDIO_URL = "https://cdn.pixabay.com/download/audio/2022/03/09/audio_c8c8a73467.mp3" 
 
 FONT_FILENAME = "Roboto-Bold.ttf"
