@@ -9,6 +9,10 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timezone
 
+# --- NUOVA IMPORTAZIONE PER IL VIDEO ---
+# Se ti dà errore qui, ricorda di fare: pip install moviepy
+from moviepy.editor import ImageClip, AudioFileClip, CompositeAudioClip
+
 # --- CONFIGURAZIONE ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN") or "INSERISCI_QUI_IL_TUO_TOKEN"
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or "INSERISCI_QUI_IL_TUO_ID"
@@ -17,9 +21,10 @@ MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/hiunkuvfe8mjvfsgyeg0vck4j8dwx6h2"
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
+AUDIO_PATH = "musica.mp3"  # <--- IL TUO FILE MP3 DEVE CHIAMARSI COSÌ
 INDIRIZZO_CHIESA = "📍 Chiesa Evangelica Eterno Nostra Giustizia\nPiazza Umberto, Grotte (AG)"
 
-# URL per scaricare il font (Roboto Bold per essere ben leggibile)
+# Font
 FONT_URL = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf"
 FONT_NAME = "Roboto-Bold.ttf"
 
@@ -49,7 +54,7 @@ def get_image_prompt(categoria):
 
 # --- 3. GENERAZIONE IMMAGINE ---
 def get_ai_image(prompt_text):
-    print(f"🎨 Generazione immagine: {prompt_text}")
+    print(f"🎨 Generazione immagine base: {prompt_text}")
     try:
         clean_prompt = prompt_text.replace(" ", "%20")
         url = f"https://image.pollinations.ai/prompt/{clean_prompt}?width=1080&height=1080&nologo=true"
@@ -68,16 +73,12 @@ def load_font(size):
             r = requests.get(FONT_URL)
             with open(FONT_NAME, 'wb') as f:
                 f.write(r.content)
-            print("✅ Font scaricato!")
-        except Exception as e:
-            print(f"⚠️ Impossibile scaricare il font: {e}. Uso default.")
-            return ImageFont.load_default()
+        except: return ImageFont.load_default()
     try:
         return ImageFont.truetype(FONT_NAME, size)
-    except Exception as e:
-        return ImageFont.load_default()
+    except: return ImageFont.load_default()
 
-# --- 5. GRAFICA (MODIFICATA: TESTO MOLTO PIÙ GRANDE) ---
+# --- 5. GRAFICA (TESTO GRANDE) ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
@@ -85,24 +86,18 @@ def create_verse_image(row):
     draw = ImageDraw.Draw(overlay)
     W, H = base_img.size
     
-    # --- NUOVE DIMENSIONI MAXI ---
-    font_size_main = 1100  # Aumentato drasticamente per leggibilità
-    font_size_ref = 180    
-    
+    font_size_main = 130
+    font_size_ref = 65    
     font_txt = load_font(font_size_main)
     font_ref = load_font(font_size_ref)
     
     text = f"“{row['Frase']}”"
-    
-    # Riduco i caratteri per riga così le parole sono più grosse e vanno a capo prima
     lines = textwrap.wrap(text, width=15) 
     
-    # Calcoli dimensioni
-    line_height = font_size_main + 10 # Spazio interlinea stretto
+    line_height = font_size_main + 10
     total_h = (len(lines) * line_height) + 100
     start_y = ((H - total_h) / 2) - 80
     
-    # Sfondo scuro
     draw.rectangle([(30, start_y - 40), (W - 30, start_y + total_h + 50)], fill=(0, 0, 0, 160))
     
     final_img = Image.alpha_composite(base_img, overlay)
@@ -134,37 +129,80 @@ def add_logo(img):
         except: pass
     return img
 
-# --- 7. INVIO ---
-def trigger_make(row, img_bytes, cap):
-    print("📡 Tentativo invio a Make...")
+# --- 7. CREAZIONE VIDEO (NUOVO!) ---
+def create_video_with_audio(image_obj, output_filename="post_video.mp4"):
+    print("🎬 Creazione video in corso... attendi qualche secondo.")
+    
+    # Salva l'immagine temporanea
+    temp_img_path = "temp_image.png"
+    image_obj.save(temp_img_path)
+    
     try:
-        files = {'upload_file': ('post.png', img_bytes, 'image/png')}
-        data = {
-            'categoria': row.get('Categoria'),
-            'frase': row.get('Frase'), 
-            'caption_completa': cap
-        }
-        res = requests.post(MAKE_WEBHOOK_URL, data=data, files=files)
+        # Controlla se c'è l'audio
+        if not os.path.exists(AUDIO_PATH):
+            print("⚠️ ATTENZIONE: File 'musica.mp3' non trovato! Creo video muto.")
+            audio = None
+        else:
+            audio = AudioFileClip(AUDIO_PATH)
+        
+        # Durata del video (15 secondi o la durata dell'audio se più corto)
+        duration = 15
+        if audio and audio.duration < 15:
+            duration = audio.duration
+
+        # Crea la clip video dall'immagine
+        clip = ImageClip(temp_img_path).set_duration(duration)
+        
+        # Aggiungi audio se esiste
+        if audio:
+            # Taglia l'audio per farlo durare quanto il video
+            audio = audio.subclip(0, duration)
+            # Sfuma l'audio in uscita negli ultimi 2 secondi
+            audio = audio.audio_fadeout(2)
+            clip = clip.set_audio(audio)
+        
+        # Esporta il video (FPS basso va bene per immagine fissa)
+        clip.write_videofile(output_filename, fps=1, codec="libx264", audio_codec="aac")
+        print("✅ Video creato con successo!")
+        return output_filename
+        
+    except Exception as e:
+        print(f"❌ Errore creazione video: {e}")
+        return None
+
+# --- 8. INVIO (MODIFICATO PER VIDEO) ---
+def trigger_make_video(row, video_path, cap):
+    print("📡 Invio VIDEO a Make...")
+    try:
+        with open(video_path, 'rb') as f:
+            files = {'upload_file': ('post.mp4', f, 'video/mp4')}
+            data = {
+                'categoria': row.get('Categoria'),
+                'frase': row.get('Frase'), 
+                'caption_completa': cap
+            }
+            res = requests.post(MAKE_WEBHOOK_URL, data=data, files=files)
         print(f"✅ Make risponde: {res.status_code}")
     except Exception as e: 
         print(f"❌ Errore Make: {e}")
 
-def send_telegram(img, cap):
+def send_telegram_video(video_path, cap):
     if not TELEGRAM_TOKEN or "INSERISCI" in TELEGRAM_TOKEN:
         print("⚠️ Token Telegram mancante.")
         return
     try:
-        print("📡 Invio a Telegram...")
-        res = requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto", 
-            files={'photo': img}, 
-            data={'chat_id': TELEGRAM_CHAT_ID, 'caption': cap}
-        )
+        print("📡 Invio VIDEO a Telegram...")
+        with open(video_path, 'rb') as f:
+            res = requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo", 
+                files={'video': f}, 
+                data={'chat_id': TELEGRAM_CHAT_ID, 'caption': cap}
+            )
         print(f"Telegram status: {res.status_code}")
     except Exception as e: 
         print(f"❌ Errore Telegram: {e}")
 
-# --- 8. ESECUZIONE ---
+# --- 9. ESECUZIONE ---
 def esegui_bot():
     now = datetime.now(timezone.utc)
     hour = now.hour
@@ -189,19 +227,21 @@ def esegui_bot():
         caption = f"✨ PAROLA DEL SIGNORE ✨\n\n“{row['Frase']}”\n📖 {row['Riferimento']}\n\n{INDIRIZZO_CHIESA}\n\n#test"
 
     if row is not None:
-        print("🚀 Generazione...")
+        print("🚀 Generazione Immagine...")
         img = add_logo(create_verse_image(row))
         
-        buf = BytesIO()
-        img.save(buf, format='PNG')
-        img_data = buf.getvalue()
+        # Salva immagine per riferimento
+        img.save("immagine_base.png")
 
-        send_telegram(img_data, caption)
-        trigger_make(row, img_data, caption)
+        # --- CREAZIONE VIDEO ---
+        video_filename = create_video_with_audio(img, "video_finale.mp4")
 
-        with open("output.txt", "w", encoding="utf-8") as f: f.write(caption)
-        img.save("immagine.png", format="PNG")
-        print("✅ Finito.")
+        if video_filename:
+            send_telegram_video(video_filename, caption)
+            trigger_make_video(row, video_filename, caption)
+            print("✅ Finito. Video inviato.")
+        else:
+            print("❌ Impossibile creare il video.")
     else:
         print("❌ Errore.")
 
