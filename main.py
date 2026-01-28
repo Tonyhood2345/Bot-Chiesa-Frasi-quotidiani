@@ -11,19 +11,28 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timezone
 
-# --- 0. AUTO-INSTALLAZIONE LIBRERIE (CORRETTA PER VERSIONE STABILE) ---
-def install(package):
-    print(f"⬇️ Installazione automatica di {package}...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+# --- 0. BLOCCO DI RIPARAZIONE (FORZA VERSIONE 1.0.3) ---
+# Questo blocco deve stare IN CIMA, prima di qualsiasi import di moviepy
+def force_install_compatible_versions():
+    print("🔧 VERIFICA VERSIONI IN CORSO...")
+    try:
+        import moviepy
+        # Se c'è moviepy 2.0 o superiore, non va bene per questo script
+        if moviepy.__version__.startswith("2"):
+            print(f"⚠️ Rilevata versione incompatibile ({moviepy.__version__}). Eseguo downgrade...")
+            raise ImportError
+    except (ImportError, AttributeError, ModuleNotFoundError):
+        print("⬇️ Installazione forzata di MoviePy 1.0.3 (Versione stabile)...")
+        # Disinstalla versione errata e installa quella giusta
+        subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "moviepy"], capture_output=True)
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "moviepy==1.0.3", "decorator==4.4.2", "imageio==2.4.1"])
+        print("✅ Librerie corrette installate.")
 
-try:
-    # Tentiamo di importare. Se fallisce, installiamo la versione SPECIFICA 1.0.3
-    from moviepy.editor import ImageClip, AudioFileClip
-except ImportError:
-    # FORZIAMO LA VERSIONE 1.0.3 PERCHÉ LA 2.0 HA ROTTO GLI IMPORT
-    install("moviepy==1.0.3")
-    install("decorator==4.4.2") # Spesso serve per compatibilità con la vecchia moviepy
-    from moviepy.editor import ImageClip, AudioFileClip
+# Eseguiamo il controllo PRIMA di importare
+force_install_compatible_versions()
+
+# Ora possiamo importare in sicurezza
+from moviepy.editor import ImageClip, AudioFileClip
 
 # --- CONFIGURAZIONE ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN") or "INSERISCI_QUI_IL_TUO_TOKEN"
