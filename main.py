@@ -1,43 +1,50 @@
 import os
 import sys
 import subprocess
+import time
 
-# --- 0. INSTALLAZIONE FORZATA DELLA VERSIONE VECCHIA (1.0.3) ---
-# Questo blocco serve a correggere l'errore "No module named moviepy.editor"
-def install_package(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-def uninstall_package(package):
-    subprocess.call([sys.executable, "-m", "pip", "uninstall", "-y", package])
-
-try:
-    # Proviamo a vedere che versione c'è
-    import moviepy
-    version = moviepy.__version__
-    print(f"ℹ️ Versione MoviePy trovata: {version}")
+# --- 0. GESTIONE DIPENDENZE "FORZA BRUTA" ---
+# Questo blocco deve stare in cima e girare PRIMA di qualsiasi altra cosa.
+def setup_dependencies():
+    print("🔧 Controllo librerie critiche...")
     
-    # Se la versione inizia con "2", è quella sbagliata. La cancelliamo.
-    if version.startswith("2"):
-        print("⚠️ Versione 2.x incompatibile trovata. Disinstallazione in corso...")
-        uninstall_package("moviepy")
-        raise ImportError # Forziamo la reinstallazione
-except (ImportError, AttributeError, ModuleNotFoundError):
-    print("⬇️ Installazione MoviePy 1.0.3 (Versione Stabile)...")
-    install_package("moviepy==1.0.3")
-    install_package("decorator==4.4.2")
-    install_package("imageio==2.4.1")
-    # Trucco per ricaricare le librerie appena installate senza riavviare
-    if "moviepy" in sys.modules: del sys.modules["moviepy"]
-    if "moviepy.editor" in sys.modules: del sys.modules["moviepy.editor"]
+    # Lista delle librerie che causano problemi se aggiornate troppo
+    packages = [
+        ("moviepy", "1.0.3"),
+        ("decorator", "4.4.2"),
+        ("imageio", "2.4.1")
+    ]
 
-# ORA che abbiamo la versione giusta, possiamo importare
-try:
-    from moviepy.editor import ImageClip, AudioFileClip
-except ImportError:
-    # Se fallisce ancora, riprova l'installazione brute-force
-    install_package("moviepy==1.0.3")
-    from moviepy.editor import ImageClip, AudioFileClip
+    for package, version in packages:
+        needs_install = False
+        try:
+            # Tenta di importare e controllare la versione
+            module = __import__(package)
+            current_version = getattr(module, "__version__", "")
+            
+            # Se la versione è diversa o inizia con "2" (per moviepy), reinstalliamo
+            if package == "moviepy" and current_version.startswith("2"):
+                print(f"⚠️ Trovata versione errata di {package} ({current_version}). Disinstallazione...")
+                subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "-y", package])
+                needs_install = True
+            elif version not in current_version:
+                # Controllo generico (meno severo, ma utile)
+                pass 
+        except ImportError:
+            needs_install = True
 
+        if needs_install:
+            print(f"⬇️ Installazione forzata di {package}=={version}...")
+            try:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", f"{package}=={version}"])
+            except Exception as e:
+                print(f"Errore installazione {package}: {e}")
+
+# AVVIAMO IL CONTROLLO PRIMA DI TUTTO
+setup_dependencies()
+
+# --- IMPORTS ---
+# Ora che siamo sicuri che le librerie sono giuste, importiamo.
 import requests
 import pandas as pd
 import matplotlib
@@ -48,6 +55,15 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timezone
 
+# Importiamo MoviePy dentro un try/except per sicurezza massima
+try:
+    from moviepy.editor import ImageClip, AudioFileClip
+except ImportError:
+    # Se fallisce ancora, è un problema di path, proviamo un reload brutale o stop
+    print("⚠️ Riavvio necessario per caricare le nuove librerie...")
+    # In molti ambienti cloud questo non serve, ma lo lasciamo per sicurezza
+    sys.exit(1) 
+
 # --- CONFIGURAZIONE ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN") or "INSERISCI_QUI_IL_TUO_TOKEN"
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or "INSERISCI_QUI_IL_TUO_ID"
@@ -57,10 +73,9 @@ CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
 INDIRIZZO_CHIESA = "📍 Chiesa Evangelica Eterno Nostra Giustizia\nPiazza Umberto, Grotte (AG)"
 
-# Nomi file
+# Risorse
 AUDIO_FILENAME = "musica.mp3"
 AUDIO_URL = "https://cdn.pixabay.com/download/audio/2022/03/09/audio_c8c8a73467.mp3" 
-
 FONT_FILENAME = "Roboto-Bold.ttf"
 FONT_URL = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf"
 
@@ -101,32 +116,25 @@ def get_ai_image(prompt_text):
         print(f"⚠️ Errore AI: {e}")
     return Image.new('RGBA', (1080, 1080), (50, 50, 70))
 
-# --- 4. GESTIONE RISORSE (Audio e Font) ---
+# --- 4. RISORSE (Font/Audio) ---
 def check_resources():
-    # Font
     if not os.path.exists(FONT_FILENAME):
-        print("⬇️ Scarico il Font...")
         try:
             r = requests.get(FONT_URL)
             with open(FONT_FILENAME, 'wb') as f: f.write(r.content)
         except: pass
-        
-    # Audio
     if not os.path.exists(AUDIO_FILENAME):
-        print("⬇️ Scarico la Musica di sottofondo...")
         try:
             headers = {'User-Agent': 'Mozilla/5.0'}
             r = requests.get(AUDIO_URL, headers=headers)
             with open(AUDIO_FILENAME, 'wb') as f: f.write(r.content)
-            print("✅ Musica scaricata!")
-        except Exception as e: 
-            print(f"⚠️ Errore scaricamento musica: {e}")
+        except: pass
 
 def load_font(size):
     try: return ImageFont.truetype(FONT_FILENAME, size)
     except: return ImageFont.load_default()
 
-# --- 5. GRAFICA (Testo Grande) ---
+# --- 5. GRAFICA ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
@@ -177,56 +185,46 @@ def add_logo(img):
         except: pass
     return img
 
-# --- 7. CREAZIONE VIDEO ---
+# --- 7. VIDEO ---
 def create_video_with_audio(image_obj, output_filename="post_video.mp4"):
-    print("🎬 Creazione video in corso... (potrebbe volerci 1 minuto)")
-    
+    print("🎬 Creazione video... (Attendere)")
     temp_img_path = "temp_image.png"
     image_obj.save(temp_img_path)
     
     try:
-        # Usa il file scaricato o esistente
+        audio = None
         if os.path.exists(AUDIO_FILENAME):
             audio = AudioFileClip(AUDIO_FILENAME)
-        else:
-            audio = None
-            print("⚠️ Nessun audio trovato, video muto.")
-
+        
         duration = 15
-        # Se l'audio dura meno di 15s, usa la durata dell'audio
-        if audio and audio.duration < 15:
-            duration = audio.duration
-
+        if audio and audio.duration < 15: duration = audio.duration
+        
         clip = ImageClip(temp_img_path).set_duration(duration)
-        
         if audio:
-            audio = audio.subclip(0, duration)
-            audio = audio.audio_fadeout(2)
+            audio = audio.subclip(0, duration).audio_fadeout(2)
             clip = clip.set_audio(audio)
-        
-        # Scrittura Video (fps=1 per velocità massima)
+            
         clip.write_videofile(output_filename, fps=1, codec="libx264", audio_codec="aac")
         print("✅ Video creato!")
         return output_filename
-        
     except Exception as e:
         print(f"❌ Errore video: {e}")
         return None
 
 # --- 8. INVIO ---
 def trigger_make_video(row, video_path, cap):
-    print("📡 Invio a Make...")
+    print("📡 Invio Make...")
     try:
         with open(video_path, 'rb') as f:
             files = {'upload_file': ('post.mp4', f, 'video/mp4')}
             data = {'categoria': row.get('Categoria'), 'frase': row.get('Frase'), 'caption_completa': cap}
             requests.post(MAKE_WEBHOOK_URL, data=data, files=files)
         print("✅ Make OK")
-    except Exception as e: print(f"❌ Make Errore: {e}")
+    except Exception as e: print(f"❌ Make err: {e}")
 
 def send_telegram_video(video_path, cap):
     if not TELEGRAM_TOKEN or "INSERISCI" in TELEGRAM_TOKEN: return
-    print("📡 Invio a Telegram...")
+    print("📡 Invio Telegram...")
     try:
         with open(video_path, 'rb') as f:
             requests.post(
@@ -235,12 +233,11 @@ def send_telegram_video(video_path, cap):
                 data={'chat_id': TELEGRAM_CHAT_ID, 'caption': cap}
             )
         print("✅ Telegram OK")
-    except Exception as e: print(f"❌ Telegram Errore: {e}")
+    except Exception as e: print(f"❌ Telegram err: {e}")
 
-# --- 9. ESECUZIONE ---
+# --- 9. MAIN ---
 def esegui_bot():
-    check_resources() # Scarica font e musica se mancano
-    
+    check_resources()
     now = datetime.now(timezone.utc)
     hour = now.hour
     weekday = now.weekday()
@@ -264,20 +261,17 @@ def esegui_bot():
         caption = f"✨ PAROLA DEL SIGNORE ✨\n\n“{row['Frase']}”\n📖 {row['Riferimento']}\n\n{INDIRIZZO_CHIESA}\n\n#test"
 
     if row is not None:
-        print("🚀 Generazione Immagine...")
+        print("🚀 Generazione...")
         img = add_logo(create_verse_image(row))
         img.save("immagine_base.png")
-
-        video_filename = create_video_with_audio(img, "video_finale.mp4")
-
-        if video_filename:
-            send_telegram_video(video_filename, caption)
-            trigger_make_video(row, video_filename, caption)
-            print("✅ TUTTO COMPLETATO.")
-        else:
-            print("❌ Errore creazione video.")
-    else:
-        print("❌ Nessuna frase trovata.")
+        
+        vid = create_video_with_audio(img, "video_finale.mp4")
+        if vid:
+            send_telegram_video(vid, caption)
+            trigger_make_video(row, vid, caption)
+            print("✅ TUTTO FATTO.")
+        else: print("❌ Errore Video.")
+    else: print("❌ Nessuna frase.")
 
 if __name__ == "__main__":
     esegui_bot()
