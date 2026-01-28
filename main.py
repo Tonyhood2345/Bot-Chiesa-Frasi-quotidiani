@@ -11,15 +11,18 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timezone
 
-# --- 0. AUTO-INSTALLAZIONE LIBRERIE ---
+# --- 0. AUTO-INSTALLAZIONE LIBRERIE (CORRETTA PER VERSIONE STABILE) ---
 def install(package):
     print(f"⬇️ Installazione automatica di {package}...")
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
 
 try:
+    # Tentiamo di importare. Se fallisce, installiamo la versione SPECIFICA 1.0.3
     from moviepy.editor import ImageClip, AudioFileClip
 except ImportError:
-    install("moviepy")
+    # FORZIAMO LA VERSIONE 1.0.3 PERCHÉ LA 2.0 HA ROTTO GLI IMPORT
+    install("moviepy==1.0.3")
+    install("decorator==4.4.2") # Spesso serve per compatibilità con la vecchia moviepy
     from moviepy.editor import ImageClip, AudioFileClip
 
 # --- CONFIGURAZIONE ---
