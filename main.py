@@ -1,4 +1,18 @@
 import os
+import subprocess
+import sys
+
+# --- 0. AUTO-INSTALLAZIONE LIBRERIE MANCANTI ---
+def install(package):
+    print(f"⬇️ Installazione automatica di {package}...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+try:
+    from moviepy.editor import ImageClip, AudioFileClip
+except ImportError:
+    install("moviepy")
+    from moviepy.editor import ImageClip, AudioFileClip
+
 import requests
 import pandas as pd
 import matplotlib
@@ -9,10 +23,6 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timezone
 
-# --- NUOVA IMPORTAZIONE PER IL VIDEO ---
-# Se ti dà errore qui, ricorda di fare: pip install moviepy
-from moviepy.editor import ImageClip, AudioFileClip, CompositeAudioClip
-
 # --- CONFIGURAZIONE ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN") or "INSERISCI_QUI_IL_TUO_TOKEN"
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or "INSERISCI_QUI_IL_TUO_ID"
@@ -21,7 +31,7 @@ MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/hiunkuvfe8mjvfsgyeg0vck4j8dwx6h2"
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
-AUDIO_PATH = "musica.mp3"  # <--- IL TUO FILE MP3 DEVE CHIAMARSI COSÌ
+AUDIO_PATH = "musica.mp3"  # <--- ASSICURATI CHE QUESTO FILE ESISTA NELLA CARTELLA!
 INDIRIZZO_CHIESA = "📍 Chiesa Evangelica Eterno Nostra Giustizia\nPiazza Umberto, Grotte (AG)"
 
 # Font
@@ -129,48 +139,44 @@ def add_logo(img):
         except: pass
     return img
 
-# --- 7. CREAZIONE VIDEO (NUOVO!) ---
+# --- 7. CREAZIONE VIDEO ---
 def create_video_with_audio(image_obj, output_filename="post_video.mp4"):
     print("🎬 Creazione video in corso... attendi qualche secondo.")
     
-    # Salva l'immagine temporanea
     temp_img_path = "temp_image.png"
     image_obj.save(temp_img_path)
     
     try:
-        # Controlla se c'è l'audio
+        # Verifica se l'audio esiste
         if not os.path.exists(AUDIO_PATH):
-            print("⚠️ ATTENZIONE: File 'musica.mp3' non trovato! Creo video muto.")
+            print(f"⚠️ ATTENZIONE: File '{AUDIO_PATH}' non trovato! Creo video muto.")
             audio = None
         else:
+            print(f"🎵 Audio trovato: {AUDIO_PATH}")
             audio = AudioFileClip(AUDIO_PATH)
         
-        # Durata del video (15 secondi o la durata dell'audio se più corto)
         duration = 15
         if audio and audio.duration < 15:
             duration = audio.duration
 
-        # Crea la clip video dall'immagine
         clip = ImageClip(temp_img_path).set_duration(duration)
         
-        # Aggiungi audio se esiste
         if audio:
-            # Taglia l'audio per farlo durare quanto il video
             audio = audio.subclip(0, duration)
-            # Sfuma l'audio in uscita negli ultimi 2 secondi
             audio = audio.audio_fadeout(2)
             clip = clip.set_audio(audio)
         
-        # Esporta il video (FPS basso va bene per immagine fissa)
+        # Scrittura file
         clip.write_videofile(output_filename, fps=1, codec="libx264", audio_codec="aac")
         print("✅ Video creato con successo!")
         return output_filename
         
     except Exception as e:
         print(f"❌ Errore creazione video: {e}")
+        # Fallback: se fallisce moviepy, restituisce None
         return None
 
-# --- 8. INVIO (MODIFICATO PER VIDEO) ---
+# --- 8. INVIO ---
 def trigger_make_video(row, video_path, cap):
     print("📡 Invio VIDEO a Make...")
     try:
@@ -230,20 +236,21 @@ def esegui_bot():
         print("🚀 Generazione Immagine...")
         img = add_logo(create_verse_image(row))
         
-        # Salva immagine per riferimento
+        # Salviamo l'immagine base (per debug)
         img.save("immagine_base.png")
 
-        # --- CREAZIONE VIDEO ---
+        # Creazione Video
         video_filename = create_video_with_audio(img, "video_finale.mp4")
 
         if video_filename:
+            # Invio Video
             send_telegram_video(video_filename, caption)
             trigger_make_video(row, video_filename, caption)
             print("✅ Finito. Video inviato.")
         else:
-            print("❌ Impossibile creare il video.")
+            print("❌ Impossibile creare il video. Controlla i log.")
     else:
-        print("❌ Errore.")
+        print("❌ Errore generazione.")
 
 if __name__ == "__main__":
     esegui_bot()
