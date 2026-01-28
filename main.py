@@ -1,18 +1,6 @@
 import os
 import subprocess
 import sys
-
-# --- 0. AUTO-INSTALLAZIONE LIBRERIE MANCANTI ---
-def install(package):
-    print(f"⬇️ Installazione automatica di {package}...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-try:
-    from moviepy.editor import ImageClip, AudioFileClip
-except ImportError:
-    install("moviepy")
-    from moviepy.editor import ImageClip, AudioFileClip
-
 import requests
 import pandas as pd
 import matplotlib
@@ -23,20 +11,33 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from datetime import datetime, timezone
 
+# --- 0. AUTO-INSTALLAZIONE LIBRERIE ---
+def install(package):
+    print(f"⬇️ Installazione automatica di {package}...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+try:
+    from moviepy.editor import ImageClip, AudioFileClip
+except ImportError:
+    install("moviepy")
+    from moviepy.editor import ImageClip, AudioFileClip
+
 # --- CONFIGURAZIONE ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN") or "INSERISCI_QUI_IL_TUO_TOKEN"
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or "INSERISCI_QUI_IL_TUO_ID"
-
 MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/hiunkuvfe8mjvfsgyeg0vck4j8dwx6h2"
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
-AUDIO_PATH = "musica.mp3"  # <--- ASSICURATI CHE QUESTO FILE ESISTA NELLA CARTELLA!
 INDIRIZZO_CHIESA = "📍 Chiesa Evangelica Eterno Nostra Giustizia\nPiazza Umberto, Grotte (AG)"
 
-# Font
+# Nomi file
+AUDIO_FILENAME = "musica.mp3"
+# Link a un brano Royalty Free (Piano Ambient)
+AUDIO_URL = "https://cdn.pixabay.com/download/audio/2022/03/09/audio_c8c8a73467.mp3" 
+
+FONT_FILENAME = "Roboto-Bold.ttf"
 FONT_URL = "https://github.com/google/fonts/raw/main/apache/roboto/Roboto-Bold.ttf"
-FONT_NAME = "Roboto-Bold.ttf"
 
 # --- 1. LETTURA DATI ---
 def get_random_verse(filtro_categoria=None):
@@ -75,20 +76,32 @@ def get_ai_image(prompt_text):
         print(f"⚠️ Errore AI: {e}")
     return Image.new('RGBA', (1080, 1080), (50, 50, 70))
 
-# --- 4. FONT ---
-def load_font(size):
-    if not os.path.exists(FONT_NAME):
-        print("⬇️ Font mancante. Download in corso...")
+# --- 4. GESTIONE RISORSE (Audio e Font) ---
+def check_resources():
+    # Font
+    if not os.path.exists(FONT_FILENAME):
+        print("⬇️ Scarico il Font...")
         try:
             r = requests.get(FONT_URL)
-            with open(FONT_NAME, 'wb') as f:
-                f.write(r.content)
-        except: return ImageFont.load_default()
-    try:
-        return ImageFont.truetype(FONT_NAME, size)
+            with open(FONT_FILENAME, 'wb') as f: f.write(r.content)
+        except: pass
+        
+    # Audio
+    if not os.path.exists(AUDIO_FILENAME):
+        print("⬇️ Scarico la Musica di sottofondo...")
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            r = requests.get(AUDIO_URL, headers=headers)
+            with open(AUDIO_FILENAME, 'wb') as f: f.write(r.content)
+            print("✅ Musica scaricata!")
+        except Exception as e: 
+            print(f"⚠️ Errore scaricamento musica: {e}")
+
+def load_font(size):
+    try: return ImageFont.truetype(FONT_FILENAME, size)
     except: return ImageFont.load_default()
 
-# --- 5. GRAFICA (TESTO GRANDE) ---
+# --- 5. GRAFICA (Testo Grande) ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
@@ -141,21 +154,21 @@ def add_logo(img):
 
 # --- 7. CREAZIONE VIDEO ---
 def create_video_with_audio(image_obj, output_filename="post_video.mp4"):
-    print("🎬 Creazione video in corso... attendi qualche secondo.")
+    print("🎬 Creazione video in corso... (potrebbe volerci 1 minuto)")
     
     temp_img_path = "temp_image.png"
     image_obj.save(temp_img_path)
     
     try:
-        # Verifica se l'audio esiste
-        if not os.path.exists(AUDIO_PATH):
-            print(f"⚠️ ATTENZIONE: File '{AUDIO_PATH}' non trovato! Creo video muto.")
-            audio = None
+        # Usa il file scaricato o esistente
+        if os.path.exists(AUDIO_FILENAME):
+            audio = AudioFileClip(AUDIO_FILENAME)
         else:
-            print(f"🎵 Audio trovato: {AUDIO_PATH}")
-            audio = AudioFileClip(AUDIO_PATH)
-        
+            audio = None
+            print("⚠️ Nessun audio trovato, video muto.")
+
         duration = 15
+        # Se l'audio dura meno di 15s, usa la durata dell'audio
         if audio and audio.duration < 15:
             duration = audio.duration
 
@@ -166,50 +179,43 @@ def create_video_with_audio(image_obj, output_filename="post_video.mp4"):
             audio = audio.audio_fadeout(2)
             clip = clip.set_audio(audio)
         
-        # Scrittura file
+        # Scrittura Video (fps=1 per velocità massima)
         clip.write_videofile(output_filename, fps=1, codec="libx264", audio_codec="aac")
-        print("✅ Video creato con successo!")
+        print("✅ Video creato!")
         return output_filename
         
     except Exception as e:
-        print(f"❌ Errore creazione video: {e}")
-        # Fallback: se fallisce moviepy, restituisce None
+        print(f"❌ Errore video: {e}")
         return None
 
 # --- 8. INVIO ---
 def trigger_make_video(row, video_path, cap):
-    print("📡 Invio VIDEO a Make...")
+    print("📡 Invio a Make...")
     try:
         with open(video_path, 'rb') as f:
             files = {'upload_file': ('post.mp4', f, 'video/mp4')}
-            data = {
-                'categoria': row.get('Categoria'),
-                'frase': row.get('Frase'), 
-                'caption_completa': cap
-            }
-            res = requests.post(MAKE_WEBHOOK_URL, data=data, files=files)
-        print(f"✅ Make risponde: {res.status_code}")
-    except Exception as e: 
-        print(f"❌ Errore Make: {e}")
+            data = {'categoria': row.get('Categoria'), 'frase': row.get('Frase'), 'caption_completa': cap}
+            requests.post(MAKE_WEBHOOK_URL, data=data, files=files)
+        print("✅ Make OK")
+    except Exception as e: print(f"❌ Make Errore: {e}")
 
 def send_telegram_video(video_path, cap):
-    if not TELEGRAM_TOKEN or "INSERISCI" in TELEGRAM_TOKEN:
-        print("⚠️ Token Telegram mancante.")
-        return
+    if not TELEGRAM_TOKEN or "INSERISCI" in TELEGRAM_TOKEN: return
+    print("📡 Invio a Telegram...")
     try:
-        print("📡 Invio VIDEO a Telegram...")
         with open(video_path, 'rb') as f:
-            res = requests.post(
+            requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo", 
                 files={'video': f}, 
                 data={'chat_id': TELEGRAM_CHAT_ID, 'caption': cap}
             )
-        print(f"Telegram status: {res.status_code}")
-    except Exception as e: 
-        print(f"❌ Errore Telegram: {e}")
+        print("✅ Telegram OK")
+    except Exception as e: print(f"❌ Telegram Errore: {e}")
 
 # --- 9. ESECUZIONE ---
 def esegui_bot():
+    check_resources() # Scarica font e musica se mancano
+    
     now = datetime.now(timezone.utc)
     hour = now.hour
     weekday = now.weekday()
@@ -235,22 +241,18 @@ def esegui_bot():
     if row is not None:
         print("🚀 Generazione Immagine...")
         img = add_logo(create_verse_image(row))
-        
-        # Salviamo l'immagine base (per debug)
         img.save("immagine_base.png")
 
-        # Creazione Video
         video_filename = create_video_with_audio(img, "video_finale.mp4")
 
         if video_filename:
-            # Invio Video
             send_telegram_video(video_filename, caption)
             trigger_make_video(row, video_filename, caption)
-            print("✅ Finito. Video inviato.")
+            print("✅ TUTTO COMPLETATO.")
         else:
-            print("❌ Impossibile creare il video. Controlla i log.")
+            print("❌ Errore creazione video.")
     else:
-        print("❌ Errore generazione.")
+        print("❌ Nessuna frase trovata.")
 
 if __name__ == "__main__":
     esegui_bot()
