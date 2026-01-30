@@ -16,7 +16,7 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 PAGE_ID = "1479209002311050"
 
-# NUOVO LINK MAKE.COM AGGIORNATO
+# ✅ NUOVO LINK MAKE.COM AGGIORNATO (Sostituito come richiesto)
 MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/hiunkuvfe8mjvfsgyeg0vck4j8dwx6h2"
 
 CSV_FILE = "Frasichiesa.csv"
@@ -142,52 +142,17 @@ def add_logo(img):
         except: pass
     return img
 
-# --- 7. MEDITAZIONE (STILE EVANGELICO PENTECOSTALE) ---
+# --- 7. MEDITAZIONE ---
 def genera_meditazione(row):
     cat = str(row['Categoria']).lower()
-    
-    # Intros più carismatiche
-    intro = random.choice([
-        "🔥 𝗣𝗮𝗿𝗼𝗹𝗮 𝗱𝗶 𝗩𝗶𝘁𝗮:", 
-        "🕊️ 𝗚𝘂𝗶𝗱𝗮 𝗱𝗲𝗹𝗹𝗼 𝗦𝗽𝗶𝗿𝗶𝘁𝗼:", 
-        "🙏 𝗣𝗲𝗿 𝗶𝗹 𝘁𝘂𝗼 𝗖𝘂𝗼𝗿𝗲:", 
-        "🙌 𝗚𝗹𝗼𝗿𝗶𝗮 𝗮 𝗗𝗶𝗼:"
-    ])
-    
-    msgs = []
+    intro = random.choice(["🔥 𝗣𝗮𝗿𝗼𝗹𝗮 𝗱𝗶 𝗩𝗶𝘁𝗮:", "🕊️ 𝗚𝘂𝗶𝗱𝗮 𝗱𝗲𝗹𝗹𝗼 𝗦𝗽𝗶𝗿𝗶𝘁𝗼:", "🙏 𝗣𝗲𝗿 𝗶𝗹 𝘁𝘂𝗼 𝗖𝘂𝗼𝗿𝗲:", "🙌 𝗚𝗹𝗼𝗿𝗶𝗮 𝗮 𝗗𝗶𝗼:"])
     
     if "consolazione" in cat:
-        msgs = [
-            "Fratello, sorella, non temere! Lo Spirito Santo è il Consolatore e oggi asciuga ogni tua lacrima.",
-            "Affida ogni peso a Gesù. Lui ha già portato le tue sofferenze sulla croce per darti pace.",
-            "Anche se attraversi la valle oscura, non sei solo. Il Buon Pastore è con te e ti rialzerà.",
-            "Dio non è mai in ritardo. Confida nei Suoi tempi perfetti e vedrai la Sua mano muoversi.",
-            "La pace di Dio, che supera ogni intelligenza, custodisca oggi il tuo cuore in Cristo Gesù."
-        ]
+        msgs = ["Fratello, sorella, non temere! Lo Spirito Santo è il Consolatore e oggi asciuga ogni tua lacrima.", "Affida ogni peso a Gesù. Lui ha già portato le tue sofferenze sulla croce per darti pace."]
     elif "esortazione" in cat:
-        msgs = [
-            "Alzati nel nome di Gesù! Dichiara vittoria sulla tua situazione, il nemico è già sconfitto.",
-            "Non mollare proprio ora. La tua benedizione è vicina. Prega con potenza e vedrai le mura crollare!",
-            "Spezza ogni catena di paura. Hai l'autorità di Cristo in te per camminare sopra le acque.",
-            "Sii forte e coraggioso. Non guardare alle circostanze, ma guarda alla grandezza del tuo Dio!",
-            "La fede sposta le montagne. Oggi, ordina alla tua montagna di spostarsi nel nome di Gesù."
-        ]
-    elif "edificazione" in cat or "fede" in cat:
-        msgs = [
-            "Resta saldo sulla Roccia che è Cristo. Nessuna tempesta potrà smuovere chi confida in Lui.",
-            "Nutri il tuo spirito con la Parola oggi. La fede viene dall'udire la Parola di Dio. Alleluia!",
-            "Sii luce in mezzo alle tenebre. Che gli altri vedano Gesù brillare attraverso la tua vita.",
-            "Non vivere per visione, ma cammina per fede. Dio sta preparando cose grandiosi per te.",
-            "Cresci nella grazia e nella conoscenza del Signore. Lui ha un piano meraviglioso per la tua vita."
-        ]
-    else: # Generico / Altro
-        msgs = [
-            "Metti Dio al primo posto e Lui si prenderà cura di tutto il resto. Amen!",
-            "Prega senza stancarti. La preghiera del giusto ha una grande efficacia nel mondo spirituale.",
-            "Oggi, scegli di benedire e non di mormorare. Dio onora chi ha un cuore grato.",
-            "Lascia che lo Spirito Santo ti guidi in ogni decisione. Lui sa cosa è meglio per te.",
-            "Ricorda: se Dio è per noi, chi sarà contro di noi? Vai avanti con fiducia!"
-        ]
+        msgs = ["Alzati nel nome di Gesù! Dichiara vittoria sulla tua situazione.", "Sii forte e coraggioso. Non guardare alle circostanze!"]
+    else:
+        msgs = ["Metti Dio al primo posto e Lui si prenderà cura di tutto il resto. Amen!", "Ricorda: se Dio è per noi, chi sarà contro di noi?"]
 
     msg_scelto = random.choice(msgs)
     return f"{intro}\n{msg_scelto}"
@@ -200,8 +165,7 @@ def send_telegram(img_bytes, caption):
         files = {'photo': ('img.png', img_bytes, 'image/png')}
         data = {'chat_id': TELEGRAM_CHAT_ID, 'caption': caption}
         requests.post(url, files=files, data=data)
-        print("✅ Telegram OK")
-    except Exception as e: print(f"❌ Telegram Error: {e}")
+    except: pass
 
 def post_facebook(img_bytes, message):
     if not FACEBOOK_TOKEN: return
@@ -210,72 +174,41 @@ def post_facebook(img_bytes, message):
     data = {'message': message, 'published': 'true'}
     try:
         requests.post(url, files=files, data=data)
-        print("✅ Facebook OK")
-    except Exception as e: print(f"❌ Facebook Error: {e}")
+    except: pass
 
 def trigger_make_webhook(row, img_bytes, meditazione_text):
-    """Invia dati E immagine a Make.com (Multipart)"""
-    print("📡 Inviando dati e immagine a Make.com...")
+    """Invia dati E immagine al NUOVO Webhook di Make.com"""
+    print(f"📡 Inviando al nuovo Webhook: {MAKE_WEBHOOK_URL}")
     
-    # 1. Dati testuali
     data_payload = {
         "categoria": row.get('Categoria', 'N/A'),
         "riferimento": row.get('Riferimento', 'N/A'),
         "frase": row.get('Frase', 'N/A'),
-        "meditazione": meditazione_text,
-        "evento": "Post Chiesa Pubblicato",
-        "origine": "Script Python - Chiesa"
+        "meditazione": meditazione_text
     }
-
-    # 2. File Immagine
-    files_payload = {
-        'upload_file': ('post_chiesa.png', img_bytes, 'image/png')
-    }
+    files_payload = {'upload_file': ('post_chiesa.png', img_bytes, 'image/png')}
 
     try:
-        response = requests.post(
-            MAKE_WEBHOOK_URL, 
-            data=data_payload,
-            files=files_payload
-        )
+        response = requests.post(MAKE_WEBHOOK_URL, data=data_payload, files=files_payload)
         if response.status_code == 200:
-            print("✅ Webhook Make attivato con immagine!")
+            print("✅ Webhook Make attivato con successo!")
         else:
-            print(f"❌ Errore Webhook Make: {response.status_code} - {response.text}")
+            print(f"❌ Errore: {response.status_code}")
     except Exception as e:
-        print(f"❌ Errore connessione Make: {e}")
+        print(f"❌ Errore connessione: {e}")
 
 # --- MAIN ---
 if __name__ == "__main__":
     row = get_random_verse()
     if row is not None:
-        print(f"📖 Versetto: {row['Riferimento']}")
         img = add_logo(create_verse_image(row))
-        
         buf = BytesIO()
         img.save(buf, format='PNG')
         img_data = buf.getvalue()
         
         meditazione = genera_meditazione(row)
-        caption = (
-            f"✨ {str(row['Categoria']).upper()} ✨\n\n"
-            f"“{row['Frase']}”\n"
-            f"📖 {row['Riferimento']}\n\n"
-            f"────────────────\n"
-            f"{meditazione}\n"
-            f"────────────────\n\n"
-            f"📍 Chiesa L'Eterno Nostra Giustizia\n\n"
-            f"#fede #vangelodelgiorno #chiesa #gesù #preghiera #bibbia #paroladidio #pentecostale"
-        )
+        caption = f"📖 {row['Riferimento']}\n\n{meditazione}\n\n#fede #chiesa"
         
-        # 1. Telegram
         send_telegram(img_data, caption)
-        
-        # 2. Facebook
         post_facebook(img_data, caption)
-        
-        # 3. Make.com (CON IMMAGINE E TESTI)
         trigger_make_webhook(row, img_data, meditazione)
-        
-    else:
-        print("❌ Nessun contenuto nel CSV.")
