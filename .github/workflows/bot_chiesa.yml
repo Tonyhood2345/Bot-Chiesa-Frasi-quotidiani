@@ -2,16 +2,13 @@ name: PASTORE Bot Chiesa Automatico
 
 on:
   schedule:
-    # 1. TUTTI I GIORNI alle 08:00 Italiane (circa 07:00 UTC)
-    - cron: '0 7 * * *'
-    
-    # 2. SOLO SABATO alle 11:00 Italiane (circa 10:00 UTC)
-    - cron: '0 10 * * 6'
-    
-    # 3. SOLO DOMENICA alle 17:00 Italiane (circa 16:00 UTC)
-    - cron: '0 16 * * 0'
-  
-  # Permette di avviarlo a mano se serve (pulsante "Run workflow")
+    # 1. MATTINA: Tutti i giorni alle 07:00 Italia (06:00 UTC)
+    - cron: '0 6 * * *'
+
+    # 2. POMERIGGIO WEEKEND: Sabato e Domenica alle 17:00 Italia (16:00 UTC)
+    - cron: '0 16 * * 6,0'
+
+  # Questo riabilita il pulsante manuale "Run workflow"
   workflow_dispatch:
 
 jobs:
@@ -19,21 +16,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
 
-    - name: Install dependencies
-      run: |
-        pip install requests pandas matplotlib pillow
+      - name: 📚 Install dependencies
+        run: |
+          pip install requests pandas matplotlib pillow
 
-    - name: Run Bot Script
-      env:
-        FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
-        TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      run: python main.py
+      - name: 🚀 Run Bot Script
+        env:
+          FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        # IMPORTANTE: Questa riga 'run' ora è allineata correttamente a sinistra
+        run: python main.py
