@@ -36,4 +36,5 @@ jobs:
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        # ORA È ALLINEATO CORRETTAMENTE (Non toccare gli spazi qui sotto!)
         run: python main.py
