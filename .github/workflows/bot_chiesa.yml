@@ -1,14 +1,17 @@
 name: PASTORE Bot Chiesa Automatico
 
 on:
-  schedule:
-    # 1. MATTINA: Tutti i giorni alle 07:00 Italia (06:00 UTC)
-    - cron: '0 6 * * *'
+  # 1. PARTE SUBITO APPENA SALVI IL FILE (PER PROVARE)
+  push:
 
-    # 2. POMERIGGIO WEEKEND: Sabato e Domenica alle 17:00 Italia (16:00 UTC)
+  # 2. ORARI PROGRAMMATI
+  schedule:
+    # Mattina: Tutti i giorni alle 07:00 Italia
+    - cron: '0 6 * * *'
+    # Pomeriggio Weekend: Sabato e Domenica alle 17:00 Italia
     - cron: '0 16 * * 6,0'
 
-  # Questo riabilita il pulsante manuale "Run workflow"
+  # 3. PULSANTE MANUALE (Se vuoi lanciarlo tu quando vuoi)
   workflow_dispatch:
 
 jobs:
@@ -16,22 +19,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout repository
+      - name: 📥 Scarica repository
         uses: actions/checkout@v3
 
-      - name: 🐍 Set up Python
+      - name: 🐍 Installa Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: 📚 Install dependencies
+      - name: 📚 Installa librerie
         run: |
           pip install requests pandas matplotlib pillow
 
-      - name: 🚀 Run Bot Script
+      - name: 🚀 Avvia il Bot
         env:
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        # IMPORTANTE: Questa riga 'run' ora è allineata correttamente a sinistra
         run: python main.py
