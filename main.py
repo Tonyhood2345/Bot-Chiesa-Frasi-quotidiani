@@ -7,16 +7,16 @@ import matplotlib.pyplot as plt
 import textwrap
 import random
 import json
+from datetime import datetime, timedelta
 from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw, ImageFont
 
 # --- CONFIGURAZIONE ---
 FACEBOOK_TOKEN = os.environ.get("FACEBOOK_TOKEN")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-PAGE_ID = "1479209002311050"
+ENV_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") 
 
-# ✅ NUOVO LINK MAKE.COM AGGIORNATO
+PAGE_ID = "1479209002311050"
 MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/mv1cutubs9k3cxedjkkjhuj1g25smgvq"
 
 CSV_FILE = "Frasichiesa.csv"
@@ -142,7 +142,7 @@ def add_logo(img):
         except: pass
     return img
 
-# --- 7. MEDITAZIONE ---
+# --- 7. TESTI DINAMICI (MEDITAZIONE & FOOTER WEEKEND) ---
 def genera_meditazione(row):
     cat = str(row['Categoria']).lower()
     intro = random.choice(["🔥 𝗣𝗮𝗿𝗼𝗹𝗮 𝗱𝗶 𝗩𝗶𝘁𝗮:", "🕊️ 𝗚𝘂𝗶𝗱𝗮 𝗱𝗲𝗹𝗹𝗼 𝗦𝗽𝗶𝗿𝗶𝘁𝗼:", "🙏 𝗣𝗲𝗿 𝗶𝗹 𝘁𝘂𝗼 𝗖𝘂𝗼𝗿𝗲:", "🙌 𝗚𝗹𝗼𝗿𝗶𝗮 𝗮 𝗗𝗶𝗼:"])
@@ -157,15 +157,89 @@ def genera_meditazione(row):
     msg_scelto = random.choice(msgs)
     return f"{intro}\n{msg_scelto}"
 
+def get_footer_message(row):
+    """
+    Gestisce il messaggio finale in base a GIORNO e ORA.
+    - Mattina (tutti i giorni): Frase spirituale standard.
+    - Pomeriggio (Sabato): Invito per Domenica.
+    - Pomeriggio (Domenica): Invito per il culto delle 18:00.
+    """
+    # Orario UTC (GitHub) + 1 ora (per approssimare l'Italia)
+    now = datetime.utcnow()
+    ora_italia = now.hour + 1 
+    giorno_settimana = now.weekday() # 5=Sab, 6=Dom
+
+    # Definiamo "Pomeriggio" se sono passate le 13:00
+    is_pomeriggio = ora_italia >= 13
+
+    # --- CASO 1: WEEKEND POMERIGGIO (Inviti) ---
+    if is_pomeriggio:
+        if giorno_settimana == 6: # Domenica Pomeriggio
+            frasi_domenica = [
+                "Vieni in Chiesa stasera alle 18:00! Gesù ti sta aspettando per dirti parole di vita.",
+                "Ti ricordo l'appuntamento con Gesù alle 18:00. Non mancare, c'è una benedizione per te!",
+                "La Parola di Dio oggi alle 18:00 sarà detta proprio per il tuo bisogno. Vieni ad ascoltarla!",
+                "Gesù ha preparato qualcosa di speciale per te. Ci vediamo al culto delle 18:00!"
+            ]
+            return f"🚨 𝗔𝗩𝗩𝗜𝗦𝗢 𝗜𝗠𝗣𝗢𝗥𝗧𝗔𝗡𝗧𝗘:\n{random.choice(frasi_domenica)}"
+        
+        elif giorno_settimana == 5: # Sabato Pomeriggio
+            frasi_sabato = [
+                "Preparati! Domani alle 18:00 ci riuniamo per lodare il Signore. Non mancare!",
+                "Domani è il giorno del Signore! Ti aspettiamo alle 18:00 per ricevere la tua benedizione.",
+                "Un invito speciale per te: domani ore 18:00 culto di adorazione. Gesù ti aspetta!"
+            ]
+            return f"🗓️ 𝗣𝗥𝗢𝗠𝗘𝗠𝗢𝗥𝗜𝗔 𝗣𝗘𝗥 𝗗𝗢𝗠𝗔𝗡𝗜:\n{random.choice(frasi_sabato)}"
+
+    # --- CASO 2: MATTINA o GIORNI FERIALI (Standard) ---
+    # Questo scatta sempre la mattina, anche sabato e domenica
+    cat = str(row['Categoria']).lower()
+    if "consolazione" in cat:
+        return random.choice([
+            "Nutri il tuo spirito. Dio è il tuo rifugio sicuro nei momenti difficili. Pace a te!",
+            "Lascia che la Sua pace custodisca il tuo cuore oggi. Egli è fedele in eterno.",
+            "Non sei mai solo: la Sua Parola è balsamo per l'anima. Alleluia!"
+        ])
+    elif "esortazione" in cat:
+        return random.choice([
+            "La fede viene dall'udire la Parola di Dio. Alzati e risplendi per la Sua gloria!",
+            "Sii un operatore della Parola e non soltanto un uditore. Corri la buona gara!",
+            "Nutri il tuo spirito con potenza! Chi confida nell'Eterno rinnova le forze."
+        ])
+    else:
+        return "Nutri il tuo spirito con la Parola oggi. La fede viene dall'udire la Parola di Dio. Alleluia!"
+
 # --- 8. SOCIAL & WEBHOOK ---
 def send_telegram(img_bytes, caption):
-    if not TELEGRAM_TOKEN: return
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
-        files = {'photo': ('img.png', img_bytes, 'image/png')}
-        data = {'chat_id': TELEGRAM_CHAT_ID, 'caption': caption}
-        requests.post(url, files=files, data=data)
-    except: pass
+    if not TELEGRAM_TOKEN: 
+        print("⚠️ Token Telegram mancante.")
+        return
+
+    recipients = []
+    # 1. Vecchio ID da variabili ambiente
+    if ENV_CHAT_ID:
+        recipients.extend([x.strip() for x in ENV_CHAT_ID.split(',') if x.strip()])
+    
+    # 2. Nuovo ID manuale
+    new_id = "8039921447"
+    if new_id not in recipients:
+        recipients.append(new_id)
+
+    print(f"📤 Invio Telegram a {len(recipients)} destinatari...")
+    
+    for chat_id in recipients:
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
+            files = {'photo': ('img.png', img_bytes, 'image/png')}
+            data = {'chat_id': chat_id, 'caption': caption}
+            response = requests.post(url, files=files, data=data)
+            
+            if response.status_code == 200:
+                print(f"✅ Inviato correttamente a: {chat_id}")
+            else:
+                print(f"❌ Errore Telegram ({chat_id}): {response.text}")
+        except Exception as e:
+            print(f"❌ Errore connessione Telegram ({chat_id}): {e}")
 
 def post_facebook(img_bytes, message):
     if not FACEBOOK_TOKEN: return
@@ -177,9 +251,7 @@ def post_facebook(img_bytes, message):
     except: pass
 
 def trigger_make_webhook(row, img_bytes, meditazione_text):
-    """Invia dati E immagine al NUOVO Webhook di Make.com"""
     print(f"📡 Inviando al nuovo Webhook: {MAKE_WEBHOOK_URL}")
-    
     data_payload = {
         "categoria": row.get('Categoria', 'N/A'),
         "riferimento": row.get('Riferimento', 'N/A'),
@@ -187,15 +259,14 @@ def trigger_make_webhook(row, img_bytes, meditazione_text):
         "meditazione": meditazione_text
     }
     files_payload = {'upload_file': ('post_chiesa.png', img_bytes, 'image/png')}
-
     try:
         response = requests.post(MAKE_WEBHOOK_URL, data=data_payload, files=files_payload)
         if response.status_code == 200:
             print("✅ Webhook Make attivato con successo!")
         else:
-            print(f"❌ Errore: {response.status_code}")
+            print(f"❌ Errore Webhook: {response.status_code}")
     except Exception as e:
-        print(f"❌ Errore connessione: {e}")
+        print(f"❌ Errore connessione Webhook: {e}")
 
 # --- MAIN ---
 if __name__ == "__main__":
@@ -206,9 +277,23 @@ if __name__ == "__main__":
         img.save(buf, format='PNG')
         img_data = buf.getvalue()
         
+        # Genera testi dinamici (con logica Orario + Giorno)
         meditazione = genera_meditazione(row)
-        caption = f"📖 {row['Riferimento']}\n\n{meditazione}\n\n#fede #chiesa"
+        messaggio_footer = get_footer_message(row)
+        
+        caption = (
+            f"📖 {row['Riferimento']}\n\n"
+            f"{meditazione}\n\n"
+            f"──────────────── 𝗚𝗹𝗼𝗿𝗶𝗮 𝗮 𝗗𝗶𝗼:\n"
+            f"{messaggio_footer}\n"
+            f"────────────────\n"
+            f"⛪ Chiesa L'Eterno Nostra Giustizia\n"
+            f"📍 Piazza Umberto I, Grotte (AG)\n"
+            f"👤 Pastore Infatino Giuseppe\n\n"
+            f"#fede #vangelodelgiorno #chiesa #gesù #preghiera #bibbia #paroladidio #pentecostale"
+        )
         
         send_telegram(img_data, caption)
         post_facebook(img_data, caption)
         trigger_make_webhook(row, img_data, meditazione)
+
