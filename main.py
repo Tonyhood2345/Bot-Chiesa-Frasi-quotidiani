@@ -1,136 +1,141 @@
 import os
 import requests
 import pandas as pd
-import matplotlib
-matplotlib.use('Agg') 
-import matplotlib.pyplot as plt
 import textwrap
 import random
-import json
 from datetime import datetime
 from io import BytesIO
-from PIL import Image, ImageOps, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 # --- CONFIGURAZIONE ---
-FACEBOOK_TOKEN = os.environ.get("FACEBOOK_TOKEN")
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-ENV_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") 
+FACEBOOK_TOKEN = os.environ.get("FACEBOOK_TOKEN", "")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 PAGE_ID = "1479209002311050"
 MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/mv1cutubs9k3cxedjkkjhuj1g25smgvq"
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
-FONT_NAME = "DejaVuSans-Bold.ttf"  # ✅ Font disponibile su Linux
+FONT_NAME = "DejaVuSans-Bold.ttf"
+
+# --- VERIFICA SECRET ALL'AVVIO ---
+print("=" * 50)
+print("🚀 AVVIO BOT CHIESA")
+print(f"⏰ UTC: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
+print("=" * 50)
+print("\n🔐 Verifica Secret:")
+print(f"  TELEGRAM_TOKEN:   {'OK' if TELEGRAM_TOKEN else 'MANCANTE'}")
+print(f"  TELEGRAM_CHAT_ID: {TELEGRAM_CHAT_ID if TELEGRAM_CHAT_ID else 'MANCANTE'}")
+print(f"  FACEBOOK_TOKEN:   {'OK' if FACEBOOK_TOKEN else 'MANCANTE'}")
 
 # --- 1. GESTIONE DATI ---
 def get_random_verse():
     try:
         df = pd.read_csv(CSV_FILE)
-        if df.empty: return None
-        return df.sample(1).iloc[0]
+        if df.empty:
+            print("CSV vuoto!")
+            return None
+        row = df.sample(1).iloc[0]
+        print(f"\n📖 Versetto: {row['Riferimento']}")
+        print(f"📂 Categoria: {row['Categoria']}")
+        return row
     except Exception as e:
-        print(f"⚠️ Errore lettura CSV: {e}")
+        print(f"Errore lettura CSV: {e}")
         return None
 
 # --- 2. GENERATORE PROMPT ---
 def get_image_prompt(categoria):
     cat = str(categoria).lower().strip()
     base_style = "bright, divine light, photorealistic, 8k, sun rays, cinematic"
-    
-    prompts_consolazione = [
-        f"peaceful sunset over calm lake, warm golden light, {base_style}",
-        f"gentle morning light through trees, forest path, {base_style}",
-        f"hands holding light, soft warm background, {base_style}"
-    ]
-    prompts_esortazione = [
-        f"majestic mountain peak, sunrise rays, dramatic sky, {base_style}",
-        f"eagle flying in blue sky, sun flare, freedom, {base_style}",
-        f"running water stream, clear river, energy, {base_style}"
-    ]
-    prompts_altro = [
-        f"beautiful blue sky with white clouds, heaven light, {base_style}",
-        f"field of flowers, spring, colorful, creation beauty, {base_style}"
-    ]
 
-    if "consolazione" in cat: return random.choice(prompts_consolazione)
-    elif "esortazione" in cat: return random.choice(prompts_esortazione)
-    else: return random.choice(prompts_altro)
+    if "consolazione" in cat:
+        return random.choice([
+            f"peaceful sunset over calm lake, warm golden light, {base_style}",
+            f"gentle morning light through trees, forest path, {base_style}",
+            f"hands holding light, soft warm background, {base_style}"
+        ])
+    elif "esortazione" in cat:
+        return random.choice([
+            f"majestic mountain peak, sunrise rays, dramatic sky, {base_style}",
+            f"eagle flying in blue sky, sun flare, freedom, {base_style}",
+            f"running water stream, clear river, energy, {base_style}"
+        ])
+    else:
+        return random.choice([
+            f"beautiful blue sky with white clouds, heaven light, {base_style}",
+            f"field of flowers, spring, colorful, creation beauty, {base_style}"
+        ])
 
-# --- 3. AI & IMMAGINI ---
+# --- 3. GENERAZIONE IMMAGINE AI ---
 def get_ai_image(prompt_text):
-    print(f"🎨 Generazione immagine: {prompt_text}")
+    print(f"\n🎨 Generazione immagine...")
     try:
         clean_prompt = prompt_text.replace(" ", "%20")
         url = f"https://image.pollinations.ai/prompt/{clean_prompt}?width=1080&height=1080&nologo=true"
-        response = requests.get(url, timeout=20)
+        response = requests.get(url, timeout=30)
         if response.status_code == 200:
+            print("✅ Immagine generata!")
             return Image.open(BytesIO(response.content)).convert("RGBA")
         else:
-            print(f"⚠️ Errore API immagine: {response.status_code}")
+            print(f"Pollinations errore: {response.status_code}")
     except Exception as e:
-        print(f"⚠️ Errore AI: {e}")
+        print(f"Errore AI: {e}")
+    print("Uso immagine di default")
     return Image.new('RGBA', (1080, 1080), (50, 50, 70))
 
-# --- 4. FUNZIONE CARICAMENTO FONT ---
+# --- 4. CARICAMENTO FONT ---
 def load_font(size):
-    fonts_to_try = [FONT_NAME, "DejaVuSans.ttf", "arial.ttf"]
-    for font_path in fonts_to_try:
+    for font_path in [FONT_NAME, "DejaVuSans.ttf"]:
         try:
             return ImageFont.truetype(font_path, size)
-        except: 
+        except:
             continue
-    print("⚠️ Nessun font TrueType trovato, uso default")
     return ImageFont.load_default()
 
-# --- 5. CREAZIONE IMMAGINE ---
+# --- 5. CREAZIONE IMMAGINE CON TESTO ---
 def create_verse_image(row):
     prompt = get_image_prompt(row['Categoria'])
     base_img = get_ai_image(prompt).resize((1080, 1080))
-    
+
     overlay = Image.new('RGBA', base_img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     W, H = base_img.size
-    
-    font_txt = load_font(100)  
-    font_ref = load_font(60)   
 
-    text = f""{row['Frase']}""
-    lines = textwrap.wrap(text, width=16) 
-    
+    font_txt = load_font(100)
+    font_ref = load_font(60)
+
+    # Virgolette normali per evitare errori di sintassi
+    frase = str(row['Frase'])
+    text = '"' + frase + '"'
+    lines = textwrap.wrap(text, width=16)
+
     line_height = 110
     text_block_height = len(lines) * line_height
-    ref_height = 80
-    total_content_height = text_block_height + ref_height
-    
+    total_content_height = text_block_height + 80
+
     start_y = ((H - total_content_height) / 2) - 150
-    
+
     padding = 50
-    box_left = 40
-    box_top = start_y - padding
-    box_right = W - 40
-    box_bottom = start_y + total_content_height + padding
-    
     draw.rectangle(
-        [(box_left, box_top), (box_right, box_bottom)], 
-        fill=(0, 0, 0, 140), 
-        outline=None
+        [(40, start_y - padding), (W - 40, start_y + total_content_height + padding)],
+        fill=(0, 0, 0, 140)
     )
-    
+
     final_img = Image.alpha_composite(base_img, overlay)
     draw_final = ImageDraw.Draw(final_img)
-    
+
     current_y = start_y
     for line in lines:
         bbox = draw_final.textbbox((0, 0), line, font=font_txt)
         w = bbox[2] - bbox[0]
-        draw_final.text(((W - w)/2, current_y), line, font=font_txt, fill="white")
+        draw_final.text(((W - w) / 2, current_y), line, font=font_txt, fill="white")
         current_y += line_height
-        
+
     ref = str(row['Riferimento'])
     bbox_ref = draw_final.textbbox((0, 0), ref, font=font_ref)
     w_ref = bbox_ref[2] - bbox_ref[0]
-    draw_final.text(((W - w_ref)/2, current_y + 25), ref, font=font_ref, fill="#FFD700")
+    draw_final.text(((W - w_ref) / 2, current_y + 25), ref, font=font_ref, fill="#FFD700")
 
     return final_img
 
@@ -142,24 +147,24 @@ def add_logo(img):
             w = int(img.width * 0.20)
             h = int(w * (logo.height / logo.width))
             logo = logo.resize((w, h))
-            img.paste(logo, ((img.width - w)//2, img.height - h - 30), logo)
+            img.paste(logo, ((img.width - w) // 2, img.height - h - 30), logo)
             print("✅ Logo aggiunto")
         except Exception as e:
-            print(f"⚠️ Errore caricamento logo: {e}")
+            print(f"Errore logo: {e}")
     else:
-        print("⚠️ File logo.png non trovato")
+        print("logo.png non trovato")
     return img
 
 # --- 7. TESTI DINAMICI ---
 def genera_meditazione(row):
     cat = str(row['Categoria']).lower()
     intro = random.choice([
-        "🔥 𝗣𝗮𝗿𝗼𝗹𝗮 𝗱𝗶 𝗩𝗶𝘁𝗮:", 
-        "🕊️ 𝗚𝘂𝗶𝗱𝗮 𝗱𝗲𝗹𝗹𝗼 𝗦𝗽𝗶𝗿𝗶𝘁𝗼:", 
-        "🙏 𝗣𝗲𝗿 𝗶𝗹 𝘁𝘂𝗼 𝗖𝘂𝗼𝗿𝗲:", 
-        "🙌 𝗚𝗹𝗼𝗿𝗶𝗮 𝗮 𝗗𝗶𝗼:"
+        "🔥 Parola di Vita:",
+        "🕊️ Guida dello Spirito:",
+        "🙏 Per il tuo Cuore:",
+        "🙌 Gloria a Dio:"
     ])
-    
+
     if "consolazione" in cat:
         msgs = [
             "Fratello, sorella, non temere! Lo Spirito Santo è il Consolatore e oggi asciuga ogni tua lacrima.",
@@ -176,177 +181,170 @@ def genera_meditazione(row):
             "Ricorda: se Dio è per noi, chi sarà contro di noi?"
         ]
 
-    msg_scelto = random.choice(msgs)
-    return f"{intro}\n{msg_scelto}"
+    return intro + "\n" + random.choice(msgs)
+
 
 def get_footer_message(row):
-    """
-    YML esegue:
-    - Ogni giorno alle 06:00 UTC (= 07:00/08:00 Italia)
-    - Sabato e Domenica alle 16:00 UTC (= 17:00/18:00 Italia)
-    
-    Logica:
-    - Se è SABATO pomeriggio → invito per DOMENICA
-    - Se è DOMENICA pomeriggio → invito per il culto OGGI
-    - Altrimenti → messaggio spirituale standard
-    """
-    
-    # Ottieni il giorno della settimana (0=lunedì, 6=domenica)
-    giorno_settimana = datetime.utcnow().weekday()
-    ora_utc = datetime.utcnow().hour
-    
-    # Determina se siamo nel post pomeridiano (16:00 UTC = 17:00/18:00 Italia)
-    # Il workflow sabato/domenica esegue alle 16:00 UTC
-    is_esecuzione_pomeridiana = ora_utc >= 15  # Margine di sicurezza
-    
-    # SABATO POMERIGGIO (giorno 5)
-    if giorno_settimana == 5 and is_esecuzione_pomeridiana:
-        frasi_sabato = [
+    giorno = datetime.utcnow().weekday()
+    ora = datetime.utcnow().hour
+    is_pomeriggio = ora >= 15
+
+    if giorno == 5 and is_pomeriggio:
+        return "🗓️ POMERIGGIO PER DOMANI:\n" + random.choice([
             "Preparati! Domani alle 18:00 ci riuniamo per lodare il Signore. Non mancare!",
-            "Domani è il giorno del Signore! Ti aspettiamo alle 18:00 per ricevere la tua benedizione.",
-            "Un invito speciale per te: domani ore 18:00 culto di adorazione. Gesù ti aspetta!"
-        ]
-        return f"🗓️ 𝗣𝗥𝗢𝗠𝗘𝗠𝗢𝗥𝗜𝗔 𝗣𝗘𝗥 𝗗𝗢𝗠𝗔𝗡𝗜:\n{random.choice(frasi_sabato)}"
-    
-    # DOMENICA POMERIGGIO (giorno 6)
-    elif giorno_settimana == 6 and is_esecuzione_pomeridiana:
-        frasi_domenica = [
-            "Vieni in Chiesa stasera alle 18:00! Gesù ti sta aspettando per dirti parole di vita.",
-            "Ti ricordo l'appuntamento con Gesù alle 18:00. Non mancare, c'è una benedizione per te!",
-            "La Parola di Dio oggi alle 18:00 sarà detta proprio per il tuo bisogno. Vieni ad ascoltarla!",
-            "Gesù ha preparato qualcosa di speciale per te. Ci vediamo al culto delle 18:00!"
-        ]
-        return f"🚨 𝗔𝗩𝗩𝗜𝗦𝗢 𝗜𝗠𝗣𝗢𝗥𝗧𝗔𝗡𝗧𝗘:\n{random.choice(frasi_domenica)}"
-    
-    # TUTTI GLI ALTRI CASI (mattina o giorni feriali)
+            "Domani è il giorno del Signore! Ti aspettiamo alle 18:00.",
+            "Un invito speciale: domani ore 18:00 culto di adorazione. Gesù ti aspetta!"
+        ])
+    elif giorno == 6 and is_pomeriggio:
+        return "🚨 AVVISO IMPORTANTE:\n" + random.choice([
+            "Vieni in Chiesa stasera alle 18:00! Gesù ti sta aspettando.",
+            "Ti ricordo: appuntamento con Gesù alle 18:00. Non mancare!",
+            "La Parola di Dio oggi alle 18:00 sarà detta per il tuo bisogno."
+        ])
     else:
         cat = str(row['Categoria']).lower()
         if "consolazione" in cat:
             return random.choice([
-                "Nutri il tuo spirito. Dio è il tuo rifugio sicuro nei momenti difficili. Pace a te!",
-                "Lascia che la Sua pace custodisca il tuo cuore oggi. Egli è fedele in eterno.",
+                "Nutri il tuo spirito. Dio è il tuo rifugio sicuro. Pace a te!",
+                "Lascia che la Sua pace custodisca il tuo cuore. Egli è fedele in eterno.",
                 "Non sei mai solo: la Sua Parola è balsamo per l'anima. Alleluia!"
             ])
         elif "esortazione" in cat:
             return random.choice([
-                "La fede viene dall'udire la Parola di Dio. Alzati e risplendi per la Sua gloria!",
-                "Sii un operatore della Parola e non soltanto un uditore. Corri la buona gara!",
-                "Nutri il tuo spirito con potenza! Chi confida nell'Eterno rinnova le forze."
+                "La fede viene dall'udire la Parola di Dio. Risplendi per la Sua gloria!",
+                "Sii un operatore della Parola e non soltanto un uditore!",
+                "Chi confida nell'Eterno rinnova le forze."
             ])
         else:
-            return "Nutri il tuo spirito con la Parola oggi. La fede viene dall'udire la Parola di Dio. Alleluia!"
+            return "Nutri il tuo spirito con la Parola oggi. Alleluia!"
 
-# --- 8. SOCIAL & WEBHOOK ---
+
+# --- 8. TELEGRAM ---
 def send_telegram(img_bytes, caption):
-    if not TELEGRAM_TOKEN: 
-        print("⚠️ Token Telegram mancante.")
-        return
+    print("\n📱 === TELEGRAM ===")
+    if not TELEGRAM_TOKEN:
+        print("TELEGRAM_TOKEN mancante!")
+        return False
+    if not TELEGRAM_CHAT_ID:
+        print("TELEGRAM_CHAT_ID mancante!")
+        return False
 
-    recipients = []
-    
-    # Carica ID da variabili ambiente (può essere una lista separata da virgole)
-    if ENV_CHAT_ID:
-        ids = [x.strip() for x in ENV_CHAT_ID.split(',') if x.strip()]
-        recipients.extend(ids)
-        print(f"📋 Caricati {len(ids)} ID da TELEGRAM_CHAT_ID")
+    chat_id = TELEGRAM_CHAT_ID.strip()
+    print(f"Invio a chat_id: {chat_id}")
 
-    if not recipients:
-        print("⚠️ Nessun destinatario Telegram configurato!")
-        return
+    try:
+        url = "https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/sendPhoto"
+        files = {'photo': ('img.png', img_bytes, 'image/png')}
+        data = {'chat_id': chat_id, 'caption': caption}
+        response = requests.post(url, files=files, data=data, timeout=15)
 
-    print(f"📤 Invio Telegram a {len(recipients)} destinatari...")
-    
-    for chat_id in recipients:
-        try:
-            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
-            files = {'photo': ('img.png', img_bytes, 'image/png')}
-            data = {'chat_id': chat_id, 'caption': caption}
-            response = requests.post(url, files=files, data=data, timeout=15)
-            
-            if response.status_code == 200:
-                print(f"✅ Inviato correttamente a: {chat_id}")
-            else:
-                print(f"❌ Errore Telegram ({chat_id}): {response.text}")
-        except Exception as e:
-            print(f"❌ Errore connessione Telegram ({chat_id}): {e}")
+        print(f"Telegram risposta: {response.status_code}")
+        if response.status_code == 200:
+            print("✅ TELEGRAM: Inviato!")
+            return True
+        else:
+            print(f"TELEGRAM errore: {response.text}")
+            return False
+    except Exception as e:
+        print(f"TELEGRAM exception: {e}")
+        return False
 
+
+# --- 9. FACEBOOK ---
 def post_facebook(img_bytes, message):
-    if not FACEBOOK_TOKEN: 
-        print("⚠️ Token Facebook mancante.")
-        return
-    
-    url = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos?access_token={FACEBOOK_TOKEN}"
+    print("\n📘 === FACEBOOK ===")
+    if not FACEBOOK_TOKEN:
+        print("FACEBOOK_TOKEN mancante - SKIPPATO")
+        return False
+
+    url = "https://graph.facebook.com/v19.0/" + PAGE_ID + "/photos?access_token=" + FACEBOOK_TOKEN
     files = {'file': ('img.png', img_bytes, 'image/png')}
     data = {'message': message, 'published': 'true'}
-    
-    try:
-        response = requests.post(url, files=files, data=data, timeout=20)
-        if response.status_code == 200:
-            print("✅ Post Facebook pubblicato")
-        else:
-            print(f"❌ Errore Facebook: {response.text}")
-    except Exception as e:
-        print(f"❌ Errore connessione Facebook: {e}")
 
+    try:
+        response = requests.post(url, files=files, data=data, timeout=15)
+        print(f"Facebook risposta: {response.status_code}")
+        if response.status_code == 200:
+            print("✅ FACEBOOK: Pubblicato!")
+            return True
+        else:
+            print(f"FACEBOOK errore: {response.text}")
+            return False
+    except Exception as e:
+        print(f"FACEBOOK exception: {e}")
+        return False
+
+
+# --- 10. MAKE WEBHOOK ---
 def trigger_make_webhook(row, img_bytes, meditazione_text):
-    print(f"📡 Inviando al Webhook Make: {MAKE_WEBHOOK_URL}")
+    print("\n🔗 === MAKE WEBHOOK ===")
+
     data_payload = {
-        "categoria": row.get('Categoria', 'N/A'),
-        "riferimento": row.get('Riferimento', 'N/A'),
-        "frase": row.get('Frase', 'N/A'),
+        "categoria": str(row.get('Categoria', 'N/A')),
+        "riferimento": str(row.get('Riferimento', 'N/A')),
+        "frase": str(row.get('Frase', 'N/A')),
         "meditazione": meditazione_text
     }
     files_payload = {'upload_file': ('post_chiesa.png', img_bytes, 'image/png')}
-    
+
     try:
-        response = requests.post(MAKE_WEBHOOK_URL, data=data_payload, files=files_payload, timeout=20)
+        response = requests.post(MAKE_WEBHOOK_URL, data=data_payload, files=files_payload, timeout=15)
+        print(f"Make risposta: {response.status_code}")
         if response.status_code == 200:
-            print("✅ Webhook Make attivato con successo!")
+            print("✅ MAKE: Attivato!")
+            return True
         else:
-            print(f"❌ Errore Webhook: {response.status_code} - {response.text}")
+            print(f"MAKE errore: {response.status_code}")
+            return False
     except Exception as e:
-        print(f"❌ Errore connessione Webhook: {e}")
+        print(f"MAKE exception: {e}")
+        return False
+
 
 # --- MAIN ---
 if __name__ == "__main__":
-    print("=" * 50)
-    print("🚀 AVVIO BOT CHIESA - PASTORE AUTOMATICO")
-    print(f"⏰ Esecuzione UTC: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 50)
-    
     row = get_random_verse()
-    if row is not None:
-        print(f"📖 Versetto selezionato: {row['Riferimento']}")
-        print(f"📂 Categoria: {row['Categoria']}")
-        
-        img = add_logo(create_verse_image(row))
-        buf = BytesIO()
-        img.save(buf, format='PNG')
-        img_data = buf.getvalue()
-        
-        # Genera testi dinamici
-        meditazione = genera_meditazione(row)
-        messaggio_footer = get_footer_message(row)
-        
-        caption = (
-            f"📖 {row['Riferimento']}\n\n"
-            f"{meditazione}\n\n"
-            f"──────────────── 𝗚𝗹𝗼𝗿𝗶𝗮 𝗮 𝗗𝗶𝗼:\n"
-            f"{messaggio_footer}\n"
-            f"────────────────\n"
-            f"⛪ Chiesa L'Eterno Nostra Giustizia\n"
-            f"📍 Piazza Umberto I, Grotte (AG)\n"
-            f"👤 Pastore Infatino Giuseppe\n\n"
-            f"#fede #vangelodelgiorno #chiesa #gesù #preghiera #bibbia #paroladidio #pentecostale"
-        )
-        
-        print("\n📤 Pubblicazione in corso...\n")
-        send_telegram(img_data, caption)
-        post_facebook(img_data, caption)
-        trigger_make_webhook(row, img_data, meditazione)
-        
-        print("\n" + "=" * 50)
-        print("✅ PROCESSO COMPLETATO!")
-        print("=" * 50)
-    else:
-        print("❌ ERRORE: Nessun versetto disponibile nel CSV!")
+    if row is None:
+        print("Nessun versetto disponibile!")
+        exit(1)
+
+    # Crea immagine
+    img = add_logo(create_verse_image(row))
+    buf = BytesIO()
+    img.save(buf, format='PNG')
+    img_data = buf.getvalue()
+    print(f"\n🖼️ Immagine: {len(img_data)} bytes")
+
+    # Testi
+    meditazione = genera_meditazione(row)
+    footer = get_footer_message(row)
+
+    caption = (
+        "📖 " + str(row['Riferimento']) + "\n\n"
+        + meditazione + "\n\n"
+        + "────────────────\n"
+        + footer + "\n"
+        + "────────────────\n"
+        + "⛪ Chiesa L'Eterno Nostra Giustizia\n"
+        + "📍 Piazza Umberto I, Grotte (AG)\n"
+        + "👤 Pastore Infatino Giuseppe\n\n"
+        + "#fede #vangelodelgiorno #chiesa #preghiera #bibbia #paroladidio #pentecostale"
+    )
+
+    # INVII
+    print("\n" + "=" * 50)
+    print("📤 INVIO MESSAGGI")
+    print("=" * 50)
+
+    telegram_ok = send_telegram(img_data, caption)
+    facebook_ok = post_facebook(img_data, caption)
+    make_ok = trigger_make_webhook(row, img_data, meditazione)
+
+    # RISULTATI
+    print("\n" + "=" * 50)
+    print("📊 RISULTATI FINALI:")
+    print(f"  📱 Telegram: {'✅ OK' if telegram_ok else '❌ FALLITO'}")
+    print(f"  📘 Facebook: {'✅ OK' if facebook_ok else '❌ FALLITO'}")
+    print(f"  🔗 Make:     {'✅ OK' if make_ok else '❌ FALLITO'}")
+    print("=" * 50)
+
