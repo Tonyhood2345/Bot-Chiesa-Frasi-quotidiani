@@ -8,34 +8,36 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 
 # --- CONFIGURAZIONE ---
+# ⚠️ IMPORTANTE: Incolla qui sotto il link "Production URL" del nodo Webhook di n8n
+N8N_WEBHOOK_URL = "INSERISCI_QUI_IL_TUO_LINK_WEBHOOK_N8N"
+
+# Questi token servono solo se vuoi testare in locale (opzionali se usi n8n)
 FACEBOOK_TOKEN = os.environ.get("FACEBOOK_TOKEN", "")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 PAGE_ID = "1479209002311050"
-MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/mv1cutubs9k3cxedjkkjhuj1g25smgvq"
-
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
 FONT_NAME = "DejaVuSans-Bold.ttf"
 
 # --- VERIFICA SECRET ALL'AVVIO ---
 print("=" * 50)
-print("🚀 AVVIO BOT CHIESA")
+print("🚀 AVVIO BOT CHIESA -> N8N")
 print(f"⏰ UTC: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
 print("=" * 50)
-print("\n🔐 Verifica Secret:")
-print(f"  TELEGRAM_TOKEN:   {'OK' if TELEGRAM_TOKEN else 'MANCANTE'}")
-print(f"  TELEGRAM_CHAT_ID: {TELEGRAM_CHAT_ID if TELEGRAM_CHAT_ID else 'MANCANTE'}")
-print(f"  FACEBOOK_TOKEN:   {'OK' if FACEBOOK_TOKEN else 'MANCANTE'}")
 
 # --- 1. GESTIONE DATI ---
 def get_random_verse():
     try:
+        if not os.path.exists(CSV_FILE):
+             print(f"❌ Errore: File {CSV_FILE} non trovato!")
+             return None
         df = pd.read_csv(CSV_FILE)
         if df.empty:
             print("CSV vuoto!")
             return None
+        # Prende un versetto a caso
         row = df.sample(1).iloc[0]
         print(f"\n📖 Versetto: {row['Riferimento']}")
         print(f"📂 Categoria: {row['Categoria']}")
@@ -81,12 +83,12 @@ def get_ai_image(prompt_text):
             print(f"Pollinations errore: {response.status_code}")
     except Exception as e:
         print(f"Errore AI: {e}")
-    print("Uso immagine di default")
+    print("Uso immagine di default (Fallback)")
     return Image.new('RGBA', (1080, 1080), (50, 50, 70))
 
 # --- 4. CARICAMENTO FONT ---
 def load_font(size):
-    for font_path in [FONT_NAME, "DejaVuSans.ttf"]:
+    for font_path in [FONT_NAME, "DejaVuSans.ttf", "arial.ttf"]:
         try:
             return ImageFont.truetype(font_path, size)
         except:
@@ -152,7 +154,7 @@ def add_logo(img):
         except Exception as e:
             print(f"Errore logo: {e}")
     else:
-        print("logo.png non trovato")
+        print("⚠️ logo.png non trovato, proseguo senza.")
     return img
 
 # --- 7. TESTI DINAMICI ---
@@ -219,85 +221,39 @@ def get_footer_message(row):
             return "Nutri il tuo spirito con la Parola oggi. Alleluia!"
 
 
-# --- 8. TELEGRAM ---
-def send_telegram(img_bytes, caption):
-    print("\n📱 === TELEGRAM ===")
-    if not TELEGRAM_TOKEN:
-        print("TELEGRAM_TOKEN mancante!")
-        return False
-    if not TELEGRAM_CHAT_ID:
-        print("TELEGRAM_CHAT_ID mancante!")
+# --- 8. WEBHOOK N8N (Il cuore del sistema) ---
+def trigger_n8n_webhook(img_bytes, caption_social, row):
+    print("\n🔗 === CONNESSIONE A N8N ===")
+
+    if "INSERISCI_QUI" in N8N_WEBHOOK_URL:
+        print("❌ ERRORE: Non hai inserito il link del Webhook di n8n nel codice!")
         return False
 
-    chat_id = TELEGRAM_CHAT_ID.strip()
-    print(f"Invio a chat_id: {chat_id}")
-
-    try:
-        url = "https://api.telegram.org/bot" + TELEGRAM_TOKEN + "/sendPhoto"
-        files = {'photo': ('img.png', img_bytes, 'image/png')}
-        data = {'chat_id': chat_id, 'caption': caption}
-        response = requests.post(url, files=files, data=data, timeout=15)
-
-        print(f"Telegram risposta: {response.status_code}")
-        if response.status_code == 200:
-            print("✅ TELEGRAM: Inviato!")
-            return True
-        else:
-            print(f"TELEGRAM errore: {response.text}")
-            return False
-    except Exception as e:
-        print(f"TELEGRAM exception: {e}")
-        return False
-
-
-# --- 9. FACEBOOK ---
-def post_facebook(img_bytes, message):
-    print("\n📘 === FACEBOOK ===")
-    if not FACEBOOK_TOKEN:
-        print("FACEBOOK_TOKEN mancante - SKIPPATO")
-        return False
-
-    url = "https://graph.facebook.com/v19.0/" + PAGE_ID + "/photos?access_token=" + FACEBOOK_TOKEN
-    files = {'file': ('img.png', img_bytes, 'image/png')}
-    data = {'message': message, 'published': 'true'}
-
-    try:
-        response = requests.post(url, files=files, data=data, timeout=15)
-        print(f"Facebook risposta: {response.status_code}")
-        if response.status_code == 200:
-            print("✅ FACEBOOK: Pubblicato!")
-            return True
-        else:
-            print(f"FACEBOOK errore: {response.text}")
-            return False
-    except Exception as e:
-        print(f"FACEBOOK exception: {e}")
-        return False
-
-
-# --- 10. MAKE WEBHOOK ---
-def trigger_make_webhook(row, img_bytes, meditazione_text):
-    print("\n🔗 === MAKE WEBHOOK ===")
-
+    # Dati da mandare a n8n
     data_payload = {
         "categoria": str(row.get('Categoria', 'N/A')),
         "riferimento": str(row.get('Riferimento', 'N/A')),
         "frase": str(row.get('Frase', 'N/A')),
-        "meditazione": meditazione_text
+        # Mandiamo il testo completo del post!
+        "caption": caption_social 
     }
+    
+    # Mandiamo l'immagine come file
+    # 'upload_file' è il nome del campo che vedrai in n8n
     files_payload = {'upload_file': ('post_chiesa.png', img_bytes, 'image/png')}
 
     try:
-        response = requests.post(MAKE_WEBHOOK_URL, data=data_payload, files=files_payload, timeout=15)
-        print(f"Make risposta: {response.status_code}")
+        response = requests.post(N8N_WEBHOOK_URL, data=data_payload, files=files_payload, timeout=45)
+        print(f"Risposta Server n8n: {response.status_code}")
+        
         if response.status_code == 200:
-            print("✅ MAKE: Attivato!")
+            print("✅ SUCCESSO: Immagine e Testo inviati a n8n!")
             return True
         else:
-            print(f"MAKE errore: {response.status_code}")
+            print(f"❌ ERRORE n8n: {response.text}")
             return False
     except Exception as e:
-        print(f"MAKE exception: {e}")
+        print(f"❌ ERRORE DI CONNESSIONE: {e}")
         return False
 
 
@@ -308,18 +264,19 @@ if __name__ == "__main__":
         print("Nessun versetto disponibile!")
         exit(1)
 
-    # Crea immagine
+    # 1. Crea immagine
     img = add_logo(create_verse_image(row))
     buf = BytesIO()
     img.save(buf, format='PNG')
     img_data = buf.getvalue()
-    print(f"\n🖼️ Immagine: {len(img_data)} bytes")
+    print(f"\n🖼️ Immagine creata: {len(img_data)} bytes")
 
-    # Testi
+    # 2. Crea Testi (Meditazione + Footer + Info)
     meditazione = genera_meditazione(row)
     footer = get_footer_message(row)
 
-    caption = (
+    # 3. Costruisci il testo FINALE per i Social
+    caption_completa = (
         "📖 " + str(row['Riferimento']) + "\n\n"
         + meditazione + "\n\n"
         + "────────────────\n"
@@ -331,20 +288,13 @@ if __name__ == "__main__":
         + "#fede #vangelodelgiorno #chiesa #preghiera #bibbia #paroladidio #pentecostale"
     )
 
-    # INVII
+    # 4. INVIO A N8N
     print("\n" + "=" * 50)
-    print("📤 INVIO MESSAGGI")
+    print("📤 INVIO AL CENTRO DI CONTROLLO (N8N)")
     print("=" * 50)
 
-    telegram_ok = send_telegram(img_data, caption)
-    facebook_ok = post_facebook(img_data, caption)
-    make_ok = trigger_make_webhook(row, img_data, meditazione)
+    n8n_ok = trigger_n8n_webhook(img_data, caption_completa, row)
 
-    # RISULTATI
     print("\n" + "=" * 50)
-    print("📊 RISULTATI FINALI:")
-    print(f"  📱 Telegram: {'✅ OK' if telegram_ok else '❌ FALLITO'}")
-    print(f"  📘 Facebook: {'✅ OK' if facebook_ok else '❌ FALLITO'}")
-    print(f"  🔗 Make:     {'✅ OK' if make_ok else '❌ FALLITO'}")
+    print(f"📊 ESITO FINALE: {'✅ TUTTO OK' if n8n_ok else '❌ QUALCOSA È ANDATO STORTO'}")
     print("=" * 50)
-
