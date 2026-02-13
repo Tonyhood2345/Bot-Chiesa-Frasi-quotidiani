@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 # --- CONFIGURAZIONE ---
 # ⚠️ IMPORTANTE: Incolla qui sotto il link "Production URL" del nodo Webhook di n8n
-N8N_WEBHOOK_URL = "http://http://100.121.235.36/:5678/webhook-test/post-chiesa"
+N8N_WEBHOOK_URL = "http://100.121.235.36/:5678/webhook-test/post-chiesa"
 
 # Questi token servono solo se vuoi testare in locale (opzionali se usi n8n)
 FACEBOOK_TOKEN = os.environ.get("FACEBOOK_TOKEN", "")
