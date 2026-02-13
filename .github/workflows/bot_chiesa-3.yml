@@ -2,10 +2,13 @@ name: PASTORE Bot Chiesa Automatico
 
 on:
   schedule:
+    # Ogni giorno alle 07:00 UTC (8:00 italiane)
     - cron: '0 7 * * *'
+    # Sabato alle 16:00 UTC (17:00 italiane) per avviso domenica
     - cron: '0 16 * * 6'
+    # Domenica alle 16:00 UTC (17:00 italiane) per avviso stasera
     - cron: '0 16 * * 0'
-  workflow_dispatch:
+  workflow_dispatch: # Permette di avviarlo a mano per test
 
 jobs:
   run-bot:
@@ -22,11 +25,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests pandas matplotlib pillow
+          pip install requests pandas pillow
 
       - name: Run Bot Script
         env:
+          # Qui mappiamo i Secrets di GitHub alle variabili che Python leggerà
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           FACEBOOK_TOKEN: ${{ secrets.FACEBOOK_TOKEN }}
+          PAGE_ID: ${{ secrets.PAGE_ID }}
         run: python main.py
