@@ -3,19 +3,22 @@ import requests
 import pandas as pd
 import random
 import json
-import pytz # Nuova libreria per l'orario italiano
+import pytz
+import textwrap
 from datetime import datetime
 from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw, ImageFont
+from dotenv import load_dotenv
 
-# --- CONFIGURAZIONE ---
-FACEBOOK_TOKEN = os.environ.get("FACEBOOK_TOKEN")
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-PAGE_ID = os.environ.get("PAGE_ID", "1479209002311050")
+# Carica le variabili da .env se il file esiste (test locale)
+load_dotenv()
 
-# LINK MAKE.COM
-MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/hiunkuvfe8mjvfsgyeg0vck4j8dwx6h2"
+# --- CONFIGURAZIONE (Prende i dati dai Secrets di GitHub) ---
+FACEBOOK_TOKEN = os.getenv("FACEBOOK_TOKEN")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+PAGE_ID = os.getenv("PAGE_ID", "1479209002311050")
+MAKE_WEBHOOK_URL = os.getenv("MAKE_WEBHOOK_URL")
 
 CSV_FILE = "Frasichiesa.csv"
 LOGO_PATH = "logo.png"
@@ -30,6 +33,9 @@ def get_italian_time():
 # --- 1. GESTIONE DATI ---
 def get_random_verse():
     try:
+        if not os.path.exists(CSV_FILE):
+            print(f"⚠️ Errore: Il file {CSV_FILE} non esiste.")
+            return None
         df = pd.read_csv(CSV_FILE)
         if df.empty: return None
         return df.sample(1).iloc[0]
@@ -47,7 +53,6 @@ def get_image_prompt(categoria):
     elif "domenica_avviso" in cat:
         return f"inside a modern church, worship atmosphere, hands raised, glowing light, spiritual energy, {base_style}"
     
-    # Prompt standard per i versetti
     prompts_consolazione = [
         f"peaceful sunset over calm lake, warm golden light, {base_style}",
         f"gentle morning light through trees, forest path, {base_style}"
@@ -80,7 +85,7 @@ def get_ai_image(prompt_text):
 
 # --- 4. FUNZIONE CARICAMENTO FONT ---
 def load_font(size):
-    fonts_to_try = [FONT_NAME, "DejaVuSans-Bold.ttf", "arial.ttf"]
+    fonts_to_try = [FONT_NAME, "DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "arial.ttf"]
     for font_path in fonts_to_try:
         try:
             return ImageFont.truetype(font_path, size)
@@ -94,14 +99,12 @@ def create_image_overlay(base_img, main_text, sub_text, is_special=False):
     draw = ImageDraw.Draw(overlay)
     W, H = base_img.size
     
-    # Dimensioni font diverse se è un avviso speciale
     title_size = 80 if is_special else 100
     sub_size = 50 if is_special else 60
     
     font_txt = load_font(title_size)  
     font_ref = load_font(sub_size)    
 
-    import textwrap
     lines = textwrap.wrap(main_text, width=20 if is_special else 16) 
     
     line_height = title_size + 10
@@ -111,7 +114,6 @@ def create_image_overlay(base_img, main_text, sub_text, is_special=False):
     
     start_y = ((H - total_content_height) / 2) - 100
     
-    # Box Sfondo
     padding = 50
     box_left = 40
     box_top = start_y - padding
@@ -179,14 +181,13 @@ def post_facebook(img_bytes, message):
     except Exception as e: print(f"❌ Facebook Exception: {e}")
 
 def trigger_make_webhook(categoria, frase, riferimento, img_bytes, meditazione_text):
+    if not MAKE_WEBHOOK_URL: return
     print("📡 Inviando a Make.com...")
     data_payload = {
         "categoria": categoria,
         "riferimento": riferimento,
         "frase": frase,
-        "meditazione": meditazione_text,
-        "evento": "Post Chiesa Pubblicato",
-        "origine": "Script Python - Chiesa"
+        "meditazione": meditazione_text
     }
     files_payload = {'upload_file': ('post_chiesa.png', img_bytes, 'image/png')}
     try:
@@ -194,114 +195,64 @@ def trigger_make_webhook(categoria, frase, riferimento, img_bytes, meditazione_t
         print("✅ Webhook Make attivato!")
     except Exception as e: print(f"❌ Errore Make: {e}")
 
-# --- 8. MEDITAZIONE STANDARD ---
+# --- 8. MEDITAZIONE ---
 def genera_meditazione(row):
     cat = str(row['Categoria']).lower()
     intro = random.choice(["🔥 𝗣𝗮𝗿𝗼𝗹𝗮 𝗱𝗶 𝗩𝗶𝘁𝗮:", "🕊️ 𝗚𝘂𝗶𝗱𝗮 𝗱𝗲𝗹𝗹𝗼 𝗦𝗽𝗶𝗿𝗶𝘁𝗼:", "🙏 𝗣𝗲𝗿 𝗶𝗹 𝘁𝘂𝗼 𝗖𝘂𝗼𝗿𝗲:"])
-    
-    msgs = ["Metti Dio al primo posto e Lui si prenderà cura di tutto. Amen!"] # Fallback
+    msgs = ["Metti Dio al primo posto e Lui si prenderà cura di tutto. Amen!"]
     if "consolazione" in cat:
         msgs = ["Non temere! Lo Spirito Santo è il Consolatore.", "Affida ogni peso a Gesù."]
     elif "esortazione" in cat:
         msgs = ["Alzati nel nome di Gesù!", "Sii forte e coraggioso. Dio è con te."]
-    
     return f"{intro}\n{random.choice(msgs)}"
 
-# --- LOGICA PRINCIPALE (DISPATCHER) ---
+# --- MAIN ---
 def main():
     ita_time = get_italian_time()
     weekday = ita_time.weekday() # 0=Lun, 5=Sab, 6=Dom
     hour = ita_time.hour
+    print(f"🕒 Orario rilevato: {ita_time.strftime('%A %H:%M')}")
 
-    print(f"🕒 Orario rilevato (Italia): {ita_time.strftime('%A %H:%M')}")
+    img_data = None
+    caption = ""
+    tipo_post = ""
 
-    # --- SCENARIO 1: SABATO POMERIGGIO (Dopo le 16:00) ---
     if weekday == 5 and hour >= 16:
-        print("🔔 Attivazione: INVITO SABATO PER DOMENICA")
-        
-        testo_img = "Sei invitato alla riunione di domani!"
-        sotto_testo = "Ore 18:00 - Ti aspettiamo"
-        
-        caption = (
-            "📣 𝗜𝗡𝗩𝗜𝗧𝗢 𝗦𝗣𝗘𝗖𝗜𝗔𝗟𝗘\n\n"
-            "Sei invitato a venire alla riunione di domani alle 18:00! 🙌\n"
-            "Non perdere questo tempo prezioso alla presenza del Signore.\n\n"
-            "📍 Chiesa L'Eterno Nostra Giustizia\n"
-            "⏰ Domani ore 18:00\n\n"
-            "#chiesa #culto #domenica #preghiera #Gesù"
-        )
-        
+        tipo_post = "Invito Sabato"
+        testo_img, sotto_testo = "Sei invitato alla riunione di domani!", "Ore 18:00 - Ti aspettiamo"
+        caption = "📣 𝗜𝗡𝗩𝗜𝗧𝗢 𝗦𝗣𝗘𝗖𝗜𝗔𝗟𝗘\n\nDomani ore 18:00! 🙌\n#chiesa #culto"
         prompt = get_image_prompt("sabato_invito")
         base_img = get_ai_image(prompt)
         final_img = add_logo(create_image_overlay(base_img, testo_img, sotto_testo, is_special=True))
-        
-        # Salvataggio buffer
-        buf = BytesIO()
-        final_img.save(buf, format='PNG')
-        img_data = buf.getvalue()
-
-        # Invio
-        send_telegram(img_data, caption)
-        post_facebook(img_data, caption)
-        trigger_make_webhook("Invito", testo_img, "Domenica ore 18", img_data, caption)
-
-    # --- SCENARIO 2: DOMENICA POMERIGGIO (Dopo le 16:00) ---
+    
     elif weekday == 6 and hour >= 16:
-        print("🔔 Attivazione: REMINDER DOMENICA POMERIGGIO")
-        
-        testo_img = "Ehi, non tardare!"
-        sotto_testo = "Iniziamo alle 17:00!" # O 18:00 come preferisci
-        
-        caption = (
-            "⏰ 𝗠𝗔𝗡𝗖𝗔 𝗣𝗢𝗖𝗢!\n\n"
-            "Ehi, non tardare! Ti stiamo aspettando per lodare il Signore insieme.\n"
-            "Prepara il tuo cuore! ❤️\n\n"
-            "📍 Chiesa L'Eterno Nostra Giustizia\n\n"
-            "#nonmancare #cultodomenicale #fede"
-        )
-        
+        tipo_post = "Reminder Domenica"
+        testo_img, sotto_testo = "Ehi, non tardare!", "Iniziamo alle 18:00!"
+        caption = "⏰ 𝗠𝗔𝗡𝗖𝗔 𝗣𝗢𝗖𝗢!\nTi stiamo aspettando! ❤️"
         prompt = get_image_prompt("domenica_avviso")
         base_img = get_ai_image(prompt)
         final_img = add_logo(create_image_overlay(base_img, testo_img, sotto_testo, is_special=True))
-        
-        buf = BytesIO()
-        final_img.save(buf, format='PNG')
-        img_data = buf.getvalue()
 
-        send_telegram(img_data, caption)
-        post_facebook(img_data, caption)
-        trigger_make_webhook("Reminder", testo_img, "Oggi Pomeriggio", img_data, caption)
-
-    # --- SCENARIO 3: TUTTI GLI ALTRI GIORNI (Mattina / Standard) ---
     else:
-        print("📖 Attivazione: VERSETTO QUOTIDIANO")
+        tipo_post = "Versetto"
         row = get_random_verse()
         if row is not None:
             prompt = get_image_prompt(row['Categoria'])
             base_img = get_ai_image(prompt)
             final_img = add_logo(create_image_overlay(base_img, f"“{row['Frase']}”", str(row['Riferimento'])))
-            
-            buf = BytesIO()
-            final_img.save(buf, format='PNG')
-            img_data = buf.getvalue()
-            
             meditazione = genera_meditazione(row)
-            caption = (
-                f"✨ {str(row['Categoria']).upper()} ✨\n\n"
-                f"“{row['Frase']}”\n"
-                f"📖 {row['Riferimento']}\n\n"
-                f"────────────────\n"
-                f"{meditazione}\n"
-                f"────────────────\n\n"
-                f"📍 Chiesa L'Eterno Nostra Giustizia\n\n"
-                f"#fede #vangelodelgiorno #chiesa #gesù #pentecostale"
-            )
-            
-            send_telegram(img_data, caption)
-            post_facebook(img_data, caption)
-            trigger_make_webhook(row['Categoria'], row['Frase'], row['Riferimento'], img_data, meditazione)
-        else:
-            print("❌ CSV Vuoto o illeggibile.")
+            caption = f"✨ {str(row['Categoria']).upper()} ✨\n\n“{row['Frase']}”\n📖 {row['Riferimento']}\n\n{meditazione}"
+        else: return
+
+    # Conversione finale per invio
+    buf = BytesIO()
+    final_img.save(buf, format='PNG')
+    img_bytes = buf.getvalue()
+
+    # Invio globale
+    send_telegram(img_bytes, caption)
+    post_facebook(img_bytes, caption)
+    trigger_make_webhook(tipo_post, caption, "Social Post", img_bytes, caption)
 
 if __name__ == "__main__":
     main()
