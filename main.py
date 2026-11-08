@@ -203,8 +203,18 @@ def send_telegram(img_bytes, caption):
     except Exception as e: print(f"❌ Telegram Exception: {e}")
 
 def post_facebook(img_bytes, message):
+    # ⛔ KILL SWITCH META ATTIVO: Chiamata a Meta Facebook bloccata
+    print("⛔ [KILL SWITCH META] Chiamata a graph.facebook.com bloccata. Convoglio su Telegram...")
+    try:
+        post_telegram(img_bytes, f"✝️ *[POST CHIESA — CONVOGLIATO SU TELEGRAM]*
+_(Meta/Facebook bloccato)_
+
+{message}")
+    except Exception as e:
+        print(f"⚠️ Errore convogliamento Telegram: {e}")
+    return
+    # CODICE ORIGINALE ARCHIVIATO:
     if not FACEBOOK_TOKEN: 
-        print("⚠️ Nessun FACEBOOK_TOKEN trovato.")
         return
     url = f"https://graph.facebook.com/v19.0/{PAGE_ID}/photos?access_token={FACEBOOK_TOKEN}"
     files = {'file': ('img.png', img_bytes, 'image/png')}
