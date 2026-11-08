@@ -1,9 +1,9 @@
 name: PASTORE Bot Chiesa Automatico
 
 on:
-# [KILL SWITCH META DISATTIVATO]   schedule:
+# [KILL SWITCH META DISATTIVATO] schedule disattivato
     # Ogni giorno alle 07:00 UTC (08:00 italiane) - Versetto quotidiano
-    - cron: '0 7 * * *'
+# [KILL SWITCH META DISATTIVATO]   - cron: '0 7 * * *'
     
     # Sabato alle 16:00 UTC (17:00 italiane) - Avviso per Domenica
     - cron: '0 16 * * 6'
